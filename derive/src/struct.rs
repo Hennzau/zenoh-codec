@@ -1,7 +1,7 @@
 use proc_macro2::TokenStream;
 use syn::DeriveInput;
 
-use crate::field::parse::ZField;
+use crate::r#struct::parse::ZStruct;
 
 mod parse;
 
@@ -10,7 +10,7 @@ mod encode;
 mod flag;
 mod len;
 
-pub fn derive_zfield(input: DeriveInput) -> TokenStream {
+pub fn derive_zstruct(input: DeriveInput) -> TokenStream {
     let ident = &input.ident;
     let data = &input.data;
 
@@ -19,13 +19,13 @@ pub fn derive_zfield(input: DeriveInput) -> TokenStream {
         match generic {
             syn::GenericParam::Lifetime(_) => {
                 if lt_params {
-                    panic!("ZField can only have one lifetime parameter.");
+                    panic!("ZStruct can only have one lifetime parameter.");
                 }
 
                 lt_params = true;
             }
             _ => {
-                panic!("ZField can only have a lifetime parameter.");
+                panic!("ZStruct can only have a lifetime parameter.");
             }
         }
     }
@@ -36,15 +36,15 @@ pub fn derive_zfield(input: DeriveInput) -> TokenStream {
         (quote::quote! {}, quote::quote! {})
     };
 
-    let (field, named) = ZField::from_data(data);
+    let r#struct = ZStruct::from_data(data);
 
-    let len_body = len::parse_body(&field);
-    let (flag_enc, flag_dec) = flag::parse_body(&field, named);
-    let encode_body = encode::parse_body(&field, flag_enc);
-    let decode_body = decode::parse_body(&field, named, flag_dec);
+    let len_body = len::parse_body(&r#struct);
+    let (flag_enc, flag_dec) = flag::parse_body(&r#struct);
+    let encode_body = encode::parse_body(&r#struct, flag_enc);
+    let decode_body = decode::parse_body(&r#struct, flag_dec);
 
     quote::quote! {
-        impl zenoh_codec::ZField for #ident #ty_elided {
+        impl zenoh_codec::ZStruct for #ident #ty_elided {
             fn z_len(&self) -> usize {
                 #len_body
             }

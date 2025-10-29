@@ -1,6 +1,6 @@
-use crate::{ZReader, ZReaderExt, ZResult, ZWriter, ZWriterExt, field::ZField};
+use crate::{ZReader, ZReaderExt, ZResult, ZWriter, ZWriterExt, r#struct::ZStruct};
 
-impl ZField for u8 {
+impl ZStruct for u8 {
     fn z_len(&self) -> usize {
         1
     }
@@ -49,7 +49,7 @@ const fn vle_len(x: u64) -> usize {
     }
 }
 
-impl ZField for u64 {
+impl ZStruct for u64 {
     fn z_len(&self) -> usize {
         vle_len(*self)
     }
@@ -105,7 +105,7 @@ impl ZField for u64 {
 macro_rules! zint {
     ($($ty:ty),*) => {
         $(
-            impl ZField for $ty {
+            impl ZStruct for $ty {
                 fn z_len(&self) -> usize {
                     vle_len(*self as u64)
                 }
@@ -118,7 +118,7 @@ macro_rules! zint {
                 type ZType<'a> = $ty;
 
                 fn z_decode<'a>(r: &mut ZReader<'a>) -> ZResult<Self::ZType<'a>> {
-                    let v = <u64 as ZField>::z_decode(r)?;
+                    let v = <u64 as ZStruct>::z_decode(r)?;
                     Ok(v as $ty)
                 }
             }

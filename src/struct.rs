@@ -1,11 +1,13 @@
 use crate::{ZReader, ZResult, ZWriter};
 
 mod array;
+mod bytes;
 mod option;
+mod str;
 mod uint;
 
 /// A trait representing a field that can be encoded and decoded in the Zenoh protocol.
-pub trait ZField {
+pub trait ZStruct {
     /// Returns the length in bytes of the encoded field.
     fn z_len(&self) -> usize;
 

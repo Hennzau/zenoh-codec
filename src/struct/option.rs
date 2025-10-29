@@ -1,6 +1,6 @@
-use crate::{ZReader, ZResult, ZWriter, field::ZField};
+use crate::{ZReader, ZResult, ZWriter, r#struct::ZStruct};
 
-impl<T: ZField> ZField for Option<T> {
+impl<T: ZStruct> ZStruct for Option<T> {
     fn z_len(&self) -> usize {
         match self {
             Some(value) => value.z_len(),

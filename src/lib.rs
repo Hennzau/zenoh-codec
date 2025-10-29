@@ -32,8 +32,8 @@ pub use zenoh_codec_derive::*;
 #[cfg(test)]
 mod test;
 
-pub mod field;
-pub use field::*;
+pub mod r#struct;
+pub use r#struct::*;
 
 pub mod phantom;
 
@@ -46,7 +46,6 @@ pub enum ZCodecError {
     CouldNotRead = 0,
     CouldNotWrite = 1,
     CouldNotParse = 2,
-    RequiredKnownLength = 3,
 }
 
 pub type ZResult<T> = core::result::Result<T, ZCodecError>;

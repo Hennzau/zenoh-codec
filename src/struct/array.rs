@@ -1,6 +1,6 @@
-use crate::{ZReader, ZReaderExt, ZResult, ZWriter, ZWriterExt, field::ZField};
+use crate::{ZReader, ZReaderExt, ZResult, ZWriter, ZWriterExt, r#struct::ZStruct};
 
-impl<const N: usize> ZField for [u8; N] {
+impl<const N: usize> ZStruct for [u8; N] {
     fn z_len(&self) -> usize {
         N
     }
