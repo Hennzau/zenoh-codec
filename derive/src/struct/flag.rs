@@ -5,7 +5,7 @@ use crate::r#struct::parse::{
     ZPresenceFlavour, ZSizeFlavour, ZStruct, ZStructAttribute, ZStructFieldKind,
 };
 
-pub fn parse_body(r#struct: &ZStruct) -> (TokenStream, TokenStream) {
+pub fn parse_body(r#struct: &ZStruct) -> (TokenStream, TokenStream, TokenStream) {
     let mut enc_flag_parts = Vec::new();
     let mut dec_flag_parts = Vec::new();
 
@@ -51,51 +51,62 @@ pub fn parse_body(r#struct: &ZStruct) -> (TokenStream, TokenStream) {
                 }
 
                 let flag = flag.unwrap();
+                let ft = flag_type.as_ref().unwrap();
 
                 if presence {
                     enc_flag_parts.push(quote::quote! {
                         if self.#access.is_some() {
-                            flag |= 1 << ( #flag - 1 - #shift );
+                            flag |= 1 << ( #flag as #ft  - 1 - #shift as #ft );
                         }
                     });
 
-                    let access = Ident::new(&format!("presence_{}", access), Span::call_site());
+                    let presence_access =
+                        Ident::new(&format!("presence_{}", access), Span::call_site());
 
                     dec_flag_parts.push(quote::quote! {
-                        let #access = ((flag >> ( #flag - 1 - #shift )) & 1) != 0;
+                        let #presence_access = ((flag >> ( #flag as #ft - 1 - #shift as #ft )) & 1) != 0;
                     });
 
                     shift += 1;
                 }
 
                 if sized {
-                    let len = quote::quote! {
-                        <usize as zenoh_codec::ZStruct>::z_len(&< #ty as zenoh_codec::ZStruct>::z_len(&self.#access))
+                    // If it's an optional field, we encode the size only if present so the len will be 0.
+                    // But the size flavour will complain if it has to encode 0 because it will first
+                    // try to subtract 1 from it. So we have to add 1 back when encoding and subtract it when decoding.
+                    let len = if presence {
+                        quote::quote! {
+                            < #ty as zenoh_codec::ZStruct>::z_len(&self.#access) + (self. #access .is_none() as usize)
+                        }
+                    } else {
+                        quote::quote! {
+                         < #ty as zenoh_codec::ZStruct>::z_len(&self.#access)
+                        }
                     };
 
                     let masked = if maybe_empty {
                         quote::quote! {
-                            ((#len & ((1usize << #size) - 1)) as u8)
+                            ((#len & ((1usize << #size) - 1)) as #ft)
                         }
                     } else {
                         quote::quote! {
-                            (((#len - 1) & ((1usize << #size) - 1)) as u8)
+                            (((#len - 1) & ((1usize << #size) - 1)) as #ft)
                         }
                     };
 
                     enc_flag_parts.push(quote::quote! {
-                        flag |= #masked << ( #flag - #size - #shift );
+                        flag |= #masked << ( #flag as #ft - #size as #ft - #shift as #ft );
                     });
 
                     if maybe_empty {
                         dec_flag_parts.push(quote::quote! {
                             let #access =
-                                ((flag >> ( #flag - #size - #shift )) & ((1 << #size) - 1)) as usize;
+                                ((flag >> ( #flag as #ft - #size as #ft - #shift as #ft )) & ((1 << #size as #ft) - 1)) as usize;
                         });
                     } else {
                         dec_flag_parts.push(quote::quote! {
                             let #access =
-                                (((flag >> ( #flag - #size - #shift )) & ((1 << #size) - 1)) as usize) + 1;
+                                (((flag >> ( #flag as #ft - #size as #ft - #shift as #ft )) & ((1 << #size as #ft) - 1)) as usize) + 1;
                         });
                     }
 
@@ -106,12 +117,16 @@ pub fn parse_body(r#struct: &ZStruct) -> (TokenStream, TokenStream) {
     }
 
     if flag.is_none() {
-        return (quote::quote! {}, quote::quote! {});
+        return (quote::quote! {}, quote::quote! {}, quote::quote! {});
     }
 
     let flag_type = flag_type.unwrap();
 
     (
+        quote::quote! {
+            let mut flag: #flag_type = 0;
+            #(#enc_flag_parts)*
+        },
         quote::quote! {
             let mut flag: #flag_type = 0;
             #(#enc_flag_parts)*

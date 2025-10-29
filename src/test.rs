@@ -1,27 +1,295 @@
-// use criterion::Criterion;
+use core::fmt::Debug;
 
-// use crate::field::ZField;
+use crate::{self as zenoh_codec, phantom};
+use crate::{ZReaderExt, ZStruct};
 
-// pub(super) fn criterion_benchmark(c: &mut Criterion) {
-//     let mut data = [0u8; 16];
-//     c.bench_function("Encode u64", |b| {
-//         b.iter(|| {
-//             let mut w = &mut data.as_mut_slice();
+#[derive(ZStruct, PartialEq, Debug)]
+struct ZBasic {
+    pub id: u8,
+    pub value: u32,
+    #[size(none)]
+    pub array: [u8; 4],
+}
 
-//             u64::MAX.z_encode(&mut w).unwrap();
+#[derive(ZStruct, PartialEq, Debug)]
+struct ZWithLifetime<'a> {
+    pub sn: u16,
+    #[size(plain)]
+    pub data: &'a [u8],
+}
 
-//             let mut r = data.as_slice();
-//             let _: u64 = <u64 as ZField>::z_decode(&mut r).unwrap();
-//         })
-//     });
-// }
+#[derive(ZStruct, PartialEq, Debug)]
+struct ZOptionPlain<'a> {
+    #[option(plain)]
+    pub maybe_u32: Option<u32>,
 
-// #[test]
-// #[ignore]
-// fn bench() {
-//     let mut c = Criterion::default().with_output_color(true).without_plots();
+    #[option(plain, size(plain))]
+    pub maybe_str: Option<&'a str>,
+}
 
-//     criterion_benchmark(&mut c);
+#[derive(ZStruct, PartialEq, Debug)]
+struct ZOptionFlag<'a> {
+    _flag: phantom::Flag<u8>,
 
-//     Criterion::default().final_summary();
-// }
+    #[option(flag)]
+    pub maybe_byte: Option<u8>,
+
+    #[option(flag, size(flag = 5))]
+    pub maybe_str: Option<&'a str>,
+}
+
+#[derive(ZStruct, PartialEq, Debug)]
+struct ZOptionFlagDeduced<'a> {
+    _flag: phantom::Flag<u16>,
+
+    #[option(flag, size(flag = 15))]
+    pub maybe_slice: Option<&'a [u8]>,
+
+    #[size(deduced)]
+    pub trailing_data: &'a str,
+}
+
+mod nested {
+    use super::*;
+    #[derive(ZStruct, PartialEq, Debug)]
+    pub struct Inner {
+        pub a: u32,
+        pub b: u8,
+    }
+}
+
+#[derive(ZStruct, PartialEq, Debug)]
+struct ZNested {
+    pub field1: nested::Inner,
+    pub field2: nested::Inner,
+}
+
+#[derive(ZStruct, PartialEq, Debug)]
+struct ZNestedOption<'a> {
+    #[option(plain)]
+    pub maybe_inner: Option<nested::Inner>,
+
+    #[size(plain)]
+    pub name: &'a str,
+}
+
+#[derive(ZStruct, PartialEq, Debug)]
+struct ZFlagComplex<'a> {
+    _flag: phantom::Flag<u32>,
+
+    #[option(flag)]
+    pub maybe_u8: Option<u8>,
+
+    #[option(flag, size(flag = 10))]
+    pub maybe_slice: Option<&'a [u8]>,
+
+    #[option(flag, size(eflag = 10))]
+    pub maybe_str: Option<&'a str>,
+
+    #[size(plain)]
+    pub payload: u64,
+}
+
+#[derive(ZStruct, PartialEq, Debug)]
+struct ZArrays<'a> {
+    pub fixed_array: [u8; 8],
+
+    #[size(plain)]
+    pub slice_plain: &'a [u8],
+
+    #[size(deduced)]
+    pub no_size_str: &'a str,
+}
+
+#[derive(ZStruct, PartialEq, Debug)]
+struct ZFlags<'a> {
+    _flag: phantom::Flag<u16>,
+
+    #[option(flag)]
+    pub small_opt: Option<u8>,
+
+    #[option(flag, size(flag = 13))]
+    pub mid_opt: Option<&'a str>,
+
+    #[option(flag, size(deduced))]
+    pub big_opt: Option<&'a [u8]>,
+}
+
+mod deep {
+    use super::*;
+    #[derive(ZStruct, PartialEq, Debug)]
+    pub struct Inner<'a> {
+        pub seq: u32,
+        #[size(plain)]
+        pub data: &'a [u8],
+    }
+}
+
+#[derive(ZStruct, PartialEq, Debug)]
+struct ZComplex<'a> {
+    pub id: u32,
+    pub qos: u8,
+    _flag: phantom::Flag<u16>,
+
+    #[option(flag)]
+    pub opt_int: Option<u16>,
+
+    #[option(flag, size(flag = 8))]
+    pub opt_str: Option<&'a str>,
+
+    #[option(plain)]
+    pub opt_inner: Option<deep::Inner<'a>>,
+
+    #[size(plain)]
+    pub inner: deep::Inner<'a>,
+
+    #[size(deduced)]
+    pub trailing: &'a str,
+}
+
+macro_rules! roundtrip {
+    ($ty:ty, $value:expr) => {{
+        let mut data = [0u8; 256];
+        let mut writer = &mut data.as_mut_slice();
+
+        let len = <$ty as ZStruct>::z_len(&$value);
+        <$ty as ZStruct>::z_encode(&$value, &mut writer).unwrap();
+
+        let mut reader = data.as_slice();
+        let decoded = <$ty as ZStruct>::z_decode(&mut reader.sub(len).unwrap()).unwrap();
+
+        assert_eq!(decoded, $value);
+    }};
+}
+
+#[test]
+fn test_zbasic() {
+    let s = ZBasic {
+        id: 42,
+        value: 123456,
+        array: [1, 2, 3, 4],
+    };
+    roundtrip!(ZBasic, s);
+}
+
+#[test]
+fn test_zwitlifetime() {
+    let buf = [10, 20, 30];
+    let s = ZWithLifetime { sn: 11, data: &buf };
+    roundtrip!(ZWithLifetime, s);
+}
+
+#[test]
+fn test_zoption_plain() {
+    let s = ZOptionPlain {
+        maybe_u32: Some(99),
+        maybe_str: Some("hello"),
+    };
+    roundtrip!(ZOptionPlain, s);
+
+    let s2 = ZOptionPlain {
+        maybe_u32: None,
+        maybe_str: None,
+    };
+    roundtrip!(ZOptionPlain, s2);
+}
+
+#[test]
+fn test_zoption_flag() {
+    let s = ZOptionFlag {
+        _flag: phantom::Flag::default(),
+        maybe_byte: Some(7),
+        maybe_str: Some("flagged"),
+    };
+    roundtrip!(ZOptionFlag, s);
+}
+
+#[test]
+fn test_zoption_flag_deduced() {
+    let buf = [1, 2, 3];
+    let s = ZOptionFlagDeduced {
+        _flag: phantom::Flag::default(),
+        maybe_slice: Some(&buf),
+        trailing_data: "xyz",
+    };
+    roundtrip!(ZOptionFlagDeduced, s);
+}
+
+#[test]
+fn test_znested() {
+    let s = ZNested {
+        field1: nested::Inner { a: 1, b: 2 },
+        field2: nested::Inner { a: 3, b: 4 },
+    };
+    roundtrip!(ZNested, s);
+}
+
+#[test]
+fn test_znested_option() {
+    let s = ZNestedOption {
+        maybe_inner: Some(nested::Inner { a: 42, b: 7 }),
+        name: "nested",
+    };
+    roundtrip!(ZNestedOption, s);
+}
+
+#[test]
+fn test_zflag_complex() {
+    let buf = [5, 6, 7];
+    let s = ZFlagComplex {
+        _flag: phantom::Flag::default(),
+        maybe_u8: Some(1),
+        maybe_slice: Some(&buf),
+        maybe_str: Some("hi"),
+        payload: 123456789,
+    };
+    roundtrip!(ZFlagComplex, s);
+}
+
+#[test]
+fn test_zarrays() {
+    let fixed = [9; 8];
+    let s = ZArrays {
+        fixed_array: fixed,
+        slice_plain: &[1, 2, 3],
+        no_size_str: "str",
+    };
+    roundtrip!(ZArrays, s);
+}
+
+#[test]
+fn test_zmultiple_flags() {
+    let buf = [42; 4];
+    let s = ZFlags {
+        _flag: phantom::Flag::default(),
+        small_opt: Some(5),
+        mid_opt: Some("flagged"),
+        big_opt: Some(&buf),
+    };
+    roundtrip!(ZFlags, s);
+}
+
+#[test]
+fn test_zcomplex() {
+    let buf = [1, 2, 3, 4];
+    let opt_inner = deep::Inner {
+        seq: 42,
+        data: &buf,
+    };
+
+    let inner = deep::Inner {
+        seq: 99,
+        data: &buf,
+    };
+    let s = ZComplex {
+        id: 1,
+        qos: 2,
+        _flag: phantom::Flag::default(),
+        opt_int: Some(123),
+        opt_str: Some("hello"),
+        opt_inner: Some(opt_inner),
+        inner,
+        trailing: "world",
+    };
+    roundtrip!(ZComplex, s);
+}

@@ -4,7 +4,7 @@ use crate::r#struct::parse::{
     ZPresenceFlavour, ZSizeFlavour, ZStruct, ZStructAttribute, ZStructFieldKind,
 };
 
-pub fn parse_body(r#struct: &ZStruct) -> TokenStream {
+pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
     let mut len_parts = Vec::new();
 
     for field in &r#struct.0 {
@@ -14,7 +14,15 @@ pub fn parse_body(r#struct: &ZStruct) -> TokenStream {
         match kind {
             ZStructFieldKind::Flag(len) => {
                 let bytes = (len / 8) as usize;
-                len_parts.push(quote::quote! { #bytes });
+                if bytes == 1 {
+                    len_parts.push(quote::quote! {
+                        #bytes
+                    });
+                } else {
+                    len_parts.push(quote::quote! {
+                        <_ as zenoh_codec::ZStruct>::z_len(&flag)
+                    });
+                }
             }
             ZStructFieldKind::ZStruct { attr, ty } => {
                 let (presence, size) = match attr {
@@ -30,9 +38,19 @@ pub fn parse_body(r#struct: &ZStruct) -> TokenStream {
                 }
 
                 if size {
-                    len_parts.push(quote::quote! {
-                        <usize as zenoh_codec::ZStruct>::z_len(&< #ty as zenoh_codec::ZStruct>::z_len(&self.#access))
-                    });
+                    if presence {
+                        len_parts.push(quote::quote! {
+                            if self.#access.is_some() {
+                                <usize as zenoh_codec::ZStruct>::z_len(&< #ty as zenoh_codec::ZStruct>::z_len(&self.#access))
+                            } else {
+                                0
+                            }
+                        });
+                    } else {
+                        len_parts.push(quote::quote! {
+                            <usize as zenoh_codec::ZStruct>::z_len(&< #ty as zenoh_codec::ZStruct>::z_len(&self.#access))
+                        });
+                    }
                 }
 
                 len_parts.push(quote::quote! {
@@ -48,6 +66,8 @@ pub fn parse_body(r#struct: &ZStruct) -> TokenStream {
         .expect("at least one field must be present");
 
     quote::quote! {
+        #flag
+
         #len_body
     }
 }

@@ -135,8 +135,8 @@ fn remove_lt_from_path(mut path: Path) -> Path {
             };
 
             for arg in &aba.args {
-                match arg {
-                    GenericArgument::Type(ty) => match ty {
+                if let GenericArgument::Type(ty) = arg {
+                    match ty {
                         Type::Reference(tr) => {
                             let mut new_tr = tr.clone();
                             new_tr.lifetime = None;
@@ -158,8 +158,7 @@ fn remove_lt_from_path(mut path: Path) -> Path {
                         _ => {
                             new_args.args.push(arg.clone());
                         }
-                    },
-                    _ => {}
+                    }
                 }
             }
 
@@ -180,53 +179,52 @@ impl ZStructField {
             }
         };
 
-        if let syn::Type::Path(tp) = ty {
-            if tp
+        if let syn::Type::Path(tp) = ty
+            && tp
                 .path
                 .segments
                 .last()
                 .expect("The last segment of the path should be present.")
                 .ident
                 == "Flag"
-            {
-                match &tp.path.segments.last().unwrap().arguments {
-                    PathArguments::AngleBracketed(aba) => {
-                        if aba.args.len() != 1 {
-                            panic!("Flag type must have exactly one generic argument");
-                        }
-
-                        let first_arg = aba.args.first().unwrap();
-                        match first_arg {
-                            GenericArgument::Type(Type::Path(path)) => {
-                                let len = if path.path.is_ident("u8") {
-                                    8u8
-                                } else if path.path.is_ident("u16") {
-                                    16u8
-                                } else if path.path.is_ident("u32") {
-                                    32u8
-                                } else if path.path.is_ident("u64") {
-                                    64u8
-                                } else {
-                                    panic!("Flag type argument must be one of u8, u16, u32, u64");
-                                };
-
-                                return ZStructField {
-                                    kind: ZStructFieldKind::Flag(len),
-                                    access,
-                                };
-                            }
-                            _ => panic!("Flag type argument must be a type"),
-                        }
+        {
+            match &tp.path.segments.last().unwrap().arguments {
+                PathArguments::AngleBracketed(aba) => {
+                    if aba.args.len() != 1 {
+                        panic!("Flag type must have exactly one generic argument");
                     }
-                    _ => panic!("Flag type must have angle bracketed arguments"),
+
+                    let first_arg = aba.args.first().unwrap();
+                    match first_arg {
+                        GenericArgument::Type(Type::Path(path)) => {
+                            let len = if path.path.is_ident("u8") {
+                                8u8
+                            } else if path.path.is_ident("u16") {
+                                16u8
+                            } else if path.path.is_ident("u32") {
+                                32u8
+                            } else if path.path.is_ident("u64") {
+                                64u8
+                            } else {
+                                panic!("Flag type argument must be one of u8, u16, u32, u64");
+                            };
+
+                            return ZStructField {
+                                kind: ZStructFieldKind::Flag(len),
+                                access,
+                            };
+                        }
+                        _ => panic!("Flag type argument must be a type"),
+                    }
                 }
+                _ => panic!("Flag type must have angle bracketed arguments"),
             }
         }
 
         let attr = attrs
             .iter()
             .find(|a| a.path().is_ident("option") || a.path().is_ident("size"))
-            .and_then(|attr| Some(ZStructAttribute::from_attr(attr)))
+            .map(ZStructAttribute::from_attr)
             .unwrap_or(ZStructAttribute::Size(ZSizeFlavour::None));
 
         let ty = match ty {
@@ -254,10 +252,10 @@ impl ZStructField {
             _ => panic!("Unsupported field type in ZStruct"),
         };
 
-        return ZStructField {
+        ZStructField {
             kind: ZStructFieldKind::ZStruct { attr, ty },
             access,
-        };
+        }
     }
 }
 
@@ -286,20 +284,16 @@ impl ZStruct {
                     flag = Some(*len);
                 }
                 ZStructFieldKind::ZStruct { attr, .. } => {
-                    match attr {
-                        ZStructAttribute::Option {
-                            presence: ZPresenceFlavour::Flag,
-                            ..
-                        } => {
-                            if flag.is_none() {
-                                panic!(
-                                    "Flag field must be defined before using an optional ZStruct"
-                                );
-                            }
-
-                            total_flag_bits += 1;
+                    if let ZStructAttribute::Option {
+                        presence: ZPresenceFlavour::Flag,
+                        ..
+                    } = attr
+                    {
+                        if flag.is_none() {
+                            panic!("Flag field must be defined before using an optional ZStruct");
                         }
-                        _ => {}
+
+                        total_flag_bits += 1;
                     }
 
                     match attr {
@@ -326,10 +320,10 @@ impl ZStruct {
             parsed_fields.push(zfield);
         }
 
-        if let Some(flag_size) = flag {
-            if total_flag_bits > flag_size {
-                panic!("Total flag bits exceed defined flag size");
-            }
+        if let Some(flag_size) = flag
+            && total_flag_bits > flag_size
+        {
+            panic!("Total flag bits exceed defined flag size");
         }
 
         ZStruct(parsed_fields)

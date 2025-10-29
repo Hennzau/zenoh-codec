@@ -12,11 +12,11 @@
 //! For variable-size fields (&'a [u8], &'a str), you can choose how their size is encoded by using size flavours:
 //! - (flag = <no.bits>) will write the size of the field in a flag with the given number of bits. It will assume that the field cannot be empty to optimize the size.
 //! - (eflag = <no.bits>) will write the size of the field in a flag with the given number of bits. It will assume that the field can be empty.
-//!     *Note*: this can be used multiple times and it will pack the sizes together in the same 1byte flag.
+//!   *Note*: this can be used multiple times and it will pack the sizes together in the same 1byte flag.
 //!
 //! - (plain) will write the size of the field as a plain usize before the actual field.
 //! - (deduced) will deduce the size of the field from the remaining size of the struct. This can only be used once and only at the end of the struct.
-//!     **WARNING**: using this flavour will expect the upper layer to decode/encode the length of the struct itself and pass a reader with the correct length (using **.sub(len)**). Failing to do so will result in errors or incorrect data
+//!   **WARNING**: using this flavour will expect the upper layer to decode/encode the length of the struct itself and pass a reader with the correct length (using **.sub(len)**). Failing to do so will result in errors or incorrect data
 //!
 //! When T is encodable/decodable, you can also encode/decode Option<T>, you should then precise the option flavour:
 //! - (flag, size(<see above>))

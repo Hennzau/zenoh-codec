@@ -2,7 +2,7 @@ use crate::{ZCodecError, ZReader, ZReaderExt, ZResult, ZWriter, ZWriterExt, r#st
 
 impl ZStruct for &'_ str {
     fn z_len(&self) -> usize {
-        self.as_bytes().len()
+        self.len()
     }
 
     fn z_encode(&self, w: &mut ZWriter) -> ZResult<()> {

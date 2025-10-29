@@ -34,9 +34,23 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
                 }
 
                 if size {
-                    encode_parts.push(quote::quote! {
-                        <usize as zenoh_codec::ZStruct>::z_encode(&< #ty as zenoh_codec::ZStruct>::z_len(&self.#access), w)?;
-                    });
+                    if presence {
+                        encode_parts.push(quote::quote! {
+                            if self.#access.is_some() {
+                                <usize as zenoh_codec::ZStruct>::z_encode(
+                                    &< #ty as zenoh_codec::ZStruct>::z_len(&self. #access),
+                                    w,
+                                )?;
+                            }
+                        });
+                    } else {
+                        encode_parts.push(quote::quote! {
+                            <usize as zenoh_codec::ZStruct>::z_encode(
+                                &< #ty as zenoh_codec::ZStruct>::z_len(&self.#access),
+                                w,
+                            )?;
+                        });
+                    }
                 }
 
                 encode_parts.push(quote::quote! {
