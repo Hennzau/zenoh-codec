@@ -5,6 +5,9 @@ use crate::inner::ZStruct1;
 mod inner {
     use zenoh_codec::ZStruct;
 
+    #[derive(ZStruct, PartialEq, Debug)]
+    pub struct Unit {}
+
     // Only no-lifetime or single-lifetime structs are supported.
     #[derive(ZStruct, PartialEq, Debug)]
     pub struct ZStruct1<'a> {
@@ -24,10 +27,13 @@ mod inner {
         // will not compile. Nested options are not supported.
         //
         // There is no good error message for those two cases yet.
+        //
+        // Option with presence stored as a plain u8 before the field
         #[option(plain)]
         pub opt: Option<[u8; 5]>,
 
         // size stored as a plain usize before the field if present
+        // presence stored as a plain u8 before the size
         #[option(plain, size(plain))]
         pub opt2: Option<&'a str>,
 
@@ -48,12 +54,15 @@ struct ZStruct2<'a> {
     // Declare a 8-bit flag to store presence/size bits. Available sizes are u8, u16, u32, u64. (Internally for > u8, it will encode it as VLE)
     _flag: phantom::Flag,
 
+    // optional presence stored as 1 bit in the flag
     // 6 bits to store the size in the flag
     #[option(flag, size(eflag = 6))]
     pub keyexpr: Option<&'a str>,
+
     // size stored as a plain usize before the field
     #[size(plain)]
     pub field1: inner::ZStruct1<'a>,
+
     // optional presence stored as 1 bit in the flag and
     // 4 bits to store the size of the field in the flag as well
     #[option(flag, size(deduced))]

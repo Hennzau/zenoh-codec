@@ -55,10 +55,14 @@ pub fn parse_body(r#struct: &ZStruct) -> TokenStream {
         }
     }
 
+    if len_parts.is_empty() {
+        len_parts.push(quote::quote! { 0usize });
+    }
+
     let len_body = len_parts
         .into_iter()
         .reduce(|acc, expr| quote::quote! { #acc + #expr })
-        .expect("at least one field must be present");
+        .unwrap();
 
     quote::quote! {
         #len_body
