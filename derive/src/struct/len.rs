@@ -4,7 +4,7 @@ use crate::r#struct::parse::{
     ZPresenceFlavour, ZSizeFlavour, ZStruct, ZStructAttribute, ZStructFieldKind,
 };
 
-pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
+pub fn parse_body(r#struct: &ZStruct) -> TokenStream {
     let mut len_parts = Vec::new();
 
     for field in &r#struct.0 {
@@ -12,17 +12,10 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
         let kind = &field.kind;
 
         match kind {
-            ZStructFieldKind::Flag(len) => {
-                let bytes = (len / 8) as usize;
-                if bytes == 1 {
-                    len_parts.push(quote::quote! {
-                        #bytes
-                    });
-                } else {
-                    len_parts.push(quote::quote! {
-                        <_ as zenoh_codec::ZStruct>::z_len(&flag)
-                    });
-                }
+            ZStructFieldKind::Flag => {
+                len_parts.push(quote::quote! {
+                    1usize
+                });
             }
             ZStructFieldKind::ZStruct { attr, ty } => {
                 let (presence, size) = match attr {
@@ -34,22 +27,24 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
                 };
 
                 if presence {
-                    len_parts.push(quote::quote! { 1 });
+                    len_parts.push(quote::quote! { 1usize });
                 }
 
                 if size {
+                    let len = quote::quote! {
+                        <usize as zenoh_codec::ZStruct>::z_len(&< #ty as zenoh_codec::ZStruct>::z_len(&self.#access))
+                    };
+
                     if presence {
                         len_parts.push(quote::quote! {
                             if self.#access.is_some() {
-                                <usize as zenoh_codec::ZStruct>::z_len(&< #ty as zenoh_codec::ZStruct>::z_len(&self.#access))
+                                #len
                             } else {
-                                0
+                                0usize
                             }
                         });
                     } else {
-                        len_parts.push(quote::quote! {
-                            <usize as zenoh_codec::ZStruct>::z_len(&< #ty as zenoh_codec::ZStruct>::z_len(&self.#access))
-                        });
+                        len_parts.push(len);
                     }
                 }
 
@@ -66,8 +61,6 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
         .expect("at least one field must be present");
 
     quote::quote! {
-        #flag
-
         #len_body
     }
 }

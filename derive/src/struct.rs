@@ -38,9 +38,9 @@ pub fn derive_zstruct(input: DeriveInput) -> TokenStream {
 
     let r#struct = ZStruct::from_data(data);
 
-    let (flag, flag_enc, flag_dec) = flag::parse_body(&r#struct);
+    let (flag_enc, flag_dec) = flag::parse_body(&r#struct);
 
-    let len_body = len::parse_body(&r#struct, flag);
+    let len_body = len::parse_body(&r#struct);
     let encode_body = encode::parse_body(&r#struct, flag_enc);
     let decode_body = decode::parse_body(&r#struct, flag_dec);
 

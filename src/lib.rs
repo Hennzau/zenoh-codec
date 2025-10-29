@@ -9,7 +9,7 @@
 //!
 //! By doing a zero-copy approach, you're limited to no lifetime or one single <'a> lifetime for all fields.
 //!
-//! For variable-size fields (&'a [u8], &'a str), you can choose how their size is encoded by using size flavours:
+//! You can choose how the size of each field is encoded by using size flavours:
 //! - (flag = <no.bits>) will write the size of the field in a flag with the given number of bits. It will assume that the field cannot be empty to optimize the size.
 //! - (eflag = <no.bits>) will write the size of the field in a flag with the given number of bits. It will assume that the field can be empty.
 //!   *Note*: this can be used multiple times and it will pack the sizes together in the same 1byte flag.
@@ -46,6 +46,8 @@ pub enum ZCodecError {
     CouldNotRead = 0,
     CouldNotWrite = 1,
     CouldNotParse = 2,
+
+    FieldExceedsReservedSize = 3,
 }
 
 pub type ZResult<T> = core::result::Result<T, ZCodecError>;

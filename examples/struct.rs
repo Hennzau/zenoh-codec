@@ -46,10 +46,10 @@ struct ZStruct2<'a> {
     pub qos: u8,
 
     // Declare a 8-bit flag to store presence/size bits. Available sizes are u8, u16, u32, u64. (Internally for > u8, it will encode it as VLE)
-    _flag: phantom::Flag<u8>,
+    _flag: phantom::Flag,
 
-    // 7 bits to store the size in the flag
-    #[option(flag, size(flag = 6))]
+    // 6 bits to store the size in the flag
+    #[option(flag, size(eflag = 6))]
     pub keyexpr: Option<&'a str>,
     // size stored as a plain usize before the field
     #[size(plain)]
@@ -85,9 +85,9 @@ fn main() {
         sn: 43,
         qos: 0,
 
-        _flag: phantom::Flag::new(),
+        _flag: phantom::Flag {},
 
-        keyexpr: Some("another_key"),
+        keyexpr: Some(""),
         field1: struct1,
         field2: Some(ZStruct1 {
             sn: 44,

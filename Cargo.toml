@@ -15,6 +15,3 @@ strip = true            # Remove symbol/debug info from final binary
 incremental = false     # Disable incremental compilation for fully optimized builds
 debug = false           # Don’t include debug symbols
 overflow-checks = false # Skip integer overflow checks
-
-# [dev-dependencies]
-# criterion = "0.7.0"

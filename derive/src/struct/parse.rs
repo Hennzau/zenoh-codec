@@ -110,7 +110,7 @@ impl ZStructAttribute {
 }
 
 pub enum ZStructFieldKind {
-    Flag(u8),
+    Flag,
     ZStruct {
         attr: ZStructAttribute,
         ty: TokenStream,
@@ -188,37 +188,10 @@ impl ZStructField {
                 .ident
                 == "Flag"
         {
-            match &tp.path.segments.last().unwrap().arguments {
-                PathArguments::AngleBracketed(aba) => {
-                    if aba.args.len() != 1 {
-                        panic!("Flag type must have exactly one generic argument");
-                    }
-
-                    let first_arg = aba.args.first().unwrap();
-                    match first_arg {
-                        GenericArgument::Type(Type::Path(path)) => {
-                            let len = if path.path.is_ident("u8") {
-                                8u8
-                            } else if path.path.is_ident("u16") {
-                                16u8
-                            } else if path.path.is_ident("u32") {
-                                32u8
-                            } else if path.path.is_ident("u64") {
-                                64u8
-                            } else {
-                                panic!("Flag type argument must be one of u8, u16, u32, u64");
-                            };
-
-                            return ZStructField {
-                                kind: ZStructFieldKind::Flag(len),
-                                access,
-                            };
-                        }
-                        _ => panic!("Flag type argument must be a type"),
-                    }
-                }
-                _ => panic!("Flag type must have angle bracketed arguments"),
-            }
+            return ZStructField {
+                kind: ZStructFieldKind::Flag,
+                access,
+            };
         }
 
         let attr = attrs
@@ -265,7 +238,7 @@ impl ZStruct {
     fn from_fields<'a>(fields: impl Iterator<Item = &'a Field>) -> ZStruct {
         let mut parsed_fields = Vec::<ZStructField>::new();
         let mut is_deduced = false;
-        let mut flag = Option::<u8>::None;
+        let mut flag = false;
         let mut total_flag_bits = 0u8;
 
         for field in fields {
@@ -276,12 +249,11 @@ impl ZStruct {
             let zfield = ZStructField::from_field(field);
 
             match &zfield.kind {
-                ZStructFieldKind::Flag(len) => {
-                    if flag.is_some() {
+                ZStructFieldKind::Flag => {
+                    if flag {
                         panic!("Only one Flag field is supported per struct");
                     }
-
-                    flag = Some(*len);
+                    flag = true;
                 }
                 ZStructFieldKind::ZStruct { attr, .. } => {
                     if let ZStructAttribute::Option {
@@ -289,8 +261,8 @@ impl ZStruct {
                         ..
                     } = attr
                     {
-                        if flag.is_none() {
-                            panic!("Flag field must be defined before using an optional ZStruct");
+                        if !flag {
+                            panic!("Flag field must be defined before using flag presence flavour");
                         }
 
                         total_flag_bits += 1;
@@ -304,7 +276,7 @@ impl ZStruct {
                             }
                             ZSizeFlavour::NonEmptyFlag(size)
                             | ZSizeFlavour::MaybeEmptyFlag(size) => {
-                                if flag.is_none() {
+                                if !flag {
                                     panic!(
                                         "Flag field must be defined before using flag size flavours"
                                     );
@@ -320,10 +292,8 @@ impl ZStruct {
             parsed_fields.push(zfield);
         }
 
-        if let Some(flag_size) = flag
-            && total_flag_bits > flag_size
-        {
-            panic!("Total flag bits exceed defined flag size");
+        if total_flag_bits > 8 {
+            panic!("Total flag bits used in struct exceed 8 bits");
         }
 
         ZStruct(parsed_fields)

@@ -5,15 +5,15 @@ use crate::r#struct::parse::{
 };
 
 pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
-    let mut encode_parts = Vec::new();
+    let mut enc = Vec::new();
 
     for field in &r#struct.0 {
         let access = &field.access;
         let kind = &field.kind;
 
         match kind {
-            ZStructFieldKind::Flag(_) => {
-                encode_parts.push(flag.clone());
+            ZStructFieldKind::Flag => {
+                enc.push(flag.clone());
             }
             ZStructFieldKind::ZStruct { attr, ty } => {
                 let (presence, size) = match attr {
@@ -25,7 +25,7 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
                 };
 
                 if presence {
-                    encode_parts.push(quote::quote! {
+                    enc.push(quote::quote! {
                         <u8 as zenoh_codec::ZStruct>::z_encode(
                             &if self. #access .is_some() { 1u8 } else { 0u8 },
                             w,
@@ -33,27 +33,22 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
                     });
                 }
 
-                if size {
-                    if presence {
-                        encode_parts.push(quote::quote! {
+                let len = quote::quote! { <usize as zenoh_codec::ZStruct>::z_encode(&< #ty as zenoh_codec::ZStruct>::z_len(&self. #access), w)?; };
+                match (presence, size) {
+                    (true, true) => {
+                        enc.push(quote::quote! {
                             if self.#access.is_some() {
-                                <usize as zenoh_codec::ZStruct>::z_encode(
-                                    &< #ty as zenoh_codec::ZStruct>::z_len(&self. #access),
-                                    w,
-                                )?;
+                                #len
                             }
                         });
-                    } else {
-                        encode_parts.push(quote::quote! {
-                            <usize as zenoh_codec::ZStruct>::z_encode(
-                                &< #ty as zenoh_codec::ZStruct>::z_len(&self.#access),
-                                w,
-                            )?;
-                        });
                     }
+                    (false, true) => {
+                        enc.push(len);
+                    }
+                    _ => {}
                 }
 
-                encode_parts.push(quote::quote! {
+                enc.push(quote::quote! {
                     < #ty as zenoh_codec::ZStruct>::z_encode(&self.#access, w)?;
                 });
             }
@@ -61,7 +56,7 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
     }
 
     quote::quote! {
-        #(#encode_parts)*
+        #(#enc)*
         Ok(())
     }
 }

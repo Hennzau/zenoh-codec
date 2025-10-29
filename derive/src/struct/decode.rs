@@ -14,11 +14,10 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
         let kind = &field.kind;
 
         match kind {
-            ZStructFieldKind::Flag(len) => {
-                let flag_type = Ident::new(&format!("u{}", len), Span::call_site());
+            ZStructFieldKind::Flag => {
                 decode_parts.push(quote::quote! {
                     #flag
-                    let #access = zenoh_codec::phantom::Flag::<#flag_type>::new();
+                    let #access = zenoh_codec::phantom::Flag {};
                 });
             }
             ZStructFieldKind::ZStruct { attr, ty } => match attr {
