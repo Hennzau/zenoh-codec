@@ -8,6 +8,7 @@ pub(crate) mod parse;
 pub(crate) mod decode;
 pub(crate) mod encode;
 pub(crate) mod flag;
+pub(crate) mod header;
 pub(crate) mod len;
 
 pub fn derive_zstruct(input: DeriveInput) -> TokenStream {
@@ -38,6 +39,7 @@ pub fn derive_zstruct(input: DeriveInput) -> TokenStream {
 
     let r#struct = ZStruct::from_data(data);
 
+    let (header_enc, header_dec) = header::parse_body(&r#struct);
     let (flag_enc, flag_dec) = flag::parse_body(&r#struct);
 
     let len_body = len::parse_body(&r#struct);
@@ -51,12 +53,16 @@ pub fn derive_zstruct(input: DeriveInput) -> TokenStream {
             }
 
             fn z_encode(&self, w: &mut zenoh_codec::ZWriter) -> zenoh_codec::ZResult<()> {
+                #header_enc
+
                 #encode_body
             }
 
             type ZType<'a> = #ident #ty_lt;
 
             fn z_decode<'a>(r: &mut zenoh_codec::ZReader<'a>) -> zenoh_codec::ZResult<Self::ZType<'a>> {
+                #header_dec
+
                 #decode_body
             }
         }

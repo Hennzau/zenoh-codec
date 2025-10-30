@@ -1,4 +1,4 @@
-use zenoh_codec::{ZReaderExt, ZStruct, phantom};
+use zenoh_codec::{ZReaderExt, ZStruct, marker};
 
 use crate::inner::ZStruct1;
 
@@ -49,7 +49,7 @@ struct ZStruct2<'a> {
     pub qos: u8,
 
     // Declare a 8-bit flag to store presence/size bits. Available sizes are u8, u16, u32, u64. (Internally for > u8, it will encode it as VLE)
-    _flag: phantom::Flag,
+    _flag: marker::Flag,
 
     // optional presence stored as 1 bit in the flag
     // 6 bits to store the size in the flag
@@ -64,6 +64,20 @@ struct ZStruct2<'a> {
     // 4 bits to store the size of the field in the flag as well
     #[option(flag, size(deduced))]
     pub field2: Option<inner::ZStruct1<'a>>,
+}
+
+#[derive(ZStruct, PartialEq, Debug)]
+struct ZStruct3<'a> {
+    // A header that will be used to store presence through bitmasking
+    _header: marker::Header,
+    #[option(header = 0b1000_0000, size(plain))]
+    pub keyexpr: Option<&'a str>,
+
+    #[size(plain)]
+    pub field1: inner::ZStruct1<'a>,
+
+    #[option(header = 0b0100_0000, size(deduced))]
+    pub field2: Option<ZStruct2<'a>>,
 }
 
 fn main() {
@@ -91,7 +105,7 @@ fn main() {
         sn: 43,
         qos: 0,
 
-        _flag: phantom::Flag {},
+        _flag: marker::Flag,
 
         keyexpr: Some(""),
         field1: struct1,
@@ -115,4 +129,28 @@ fn main() {
     let decoded_struct2 = <ZStruct2 as ZStruct>::z_decode(&mut reader.sub(len).unwrap()).unwrap();
 
     assert_eq!(struct2, decoded_struct2);
+
+    let struct3 = ZStruct3 {
+        _header: marker::Header,
+        keyexpr: Some("key_expr"),
+        field1: ZStruct1 {
+            sn: 45,
+            qos: 1,
+            array: [10, 11, 12],
+            opt: Some([13, 14, 15, 16, 17]),
+            opt2: Some("world"),
+            keyexpr: "key2==value2",
+        },
+        field2: Some(struct2),
+    };
+
+    let mut data = [0u8; 512];
+    let mut writer = &mut data.as_mut_slice();
+
+    let len = <ZStruct3 as ZStruct>::z_len(&struct3);
+    <ZStruct3 as ZStruct>::z_encode(&struct3, &mut writer).unwrap();
+
+    let mut reader = data.as_slice();
+    let decoded_struct3 = <ZStruct3 as ZStruct>::z_decode(&mut reader.sub(len).unwrap()).unwrap();
+    assert_eq!(struct3, decoded_struct3);
 }

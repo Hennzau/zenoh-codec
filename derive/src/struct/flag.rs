@@ -17,13 +17,14 @@ pub fn parse_body(r#struct: &ZStruct) -> (TokenStream, TokenStream) {
         let kind = &field.kind;
 
         match kind {
+            ZStructFieldKind::Header => {}
             ZStructFieldKind::Flag => {
                 flag = true;
             }
             ZStructFieldKind::ZStruct { attr, ty } => {
                 let (presence, size) = match attr {
                     ZStructAttribute::Option { presence, size } => {
-                        (*presence == ZPresenceFlavour::Flag, size)
+                        (matches!(*presence, ZPresenceFlavour::Flag), size)
                     }
                     ZStructAttribute::Size(size) => (false, size),
                 };

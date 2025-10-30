@@ -12,7 +12,7 @@ pub fn parse_body(r#struct: &ZStruct) -> TokenStream {
         let kind = &field.kind;
 
         match kind {
-            ZStructFieldKind::Flag => {
+            ZStructFieldKind::Flag | ZStructFieldKind::Header => {
                 len_parts.push(quote::quote! {
                     1usize
                 });
@@ -20,10 +20,10 @@ pub fn parse_body(r#struct: &ZStruct) -> TokenStream {
             ZStructFieldKind::ZStruct { attr, ty } => {
                 let (presence, size) = match attr {
                     ZStructAttribute::Option { presence, size } => (
-                        *presence == ZPresenceFlavour::Plain,
-                        *size == ZSizeFlavour::Plain,
+                        matches!(*presence, ZPresenceFlavour::Plain),
+                        matches!(*size, ZSizeFlavour::Plain),
                     ),
-                    ZStructAttribute::Size(size) => (false, *size == ZSizeFlavour::Plain),
+                    ZStructAttribute::Size(size) => (false, matches!(*size, ZSizeFlavour::Plain)),
                 };
 
                 if presence {

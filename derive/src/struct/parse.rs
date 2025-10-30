@@ -1,7 +1,7 @@
 use proc_macro2::TokenStream;
 use syn::{
-    AngleBracketedGenericArguments, Attribute, Data, DataStruct, Field, Fields, GenericArgument,
-    LitInt, Path, PathArguments, Type, meta::ParseNestedMeta,
+    AngleBracketedGenericArguments, Attribute, Data, DataStruct, Expr, Field, Fields,
+    GenericArgument, LitInt, Path, PathArguments, Type, meta::ParseNestedMeta,
 };
 
 #[derive(PartialEq)]
@@ -39,10 +39,10 @@ impl ZSizeFlavour {
     }
 }
 
-#[derive(PartialEq)]
 pub enum ZPresenceFlavour {
     Flag,
     Plain,
+    Header(Expr),
 }
 
 impl ZPresenceFlavour {
@@ -54,13 +54,17 @@ impl ZPresenceFlavour {
             flavour.replace(ZPresenceFlavour::Flag);
         } else if meta.path.is_ident("plain") {
             flavour.replace(ZPresenceFlavour::Plain);
+        } else if meta.path.is_ident("header") {
+            let value = meta.value().expect("Expected value for header flavour");
+            let expr: Expr = value.parse()?;
+
+            flavour.replace(ZPresenceFlavour::Header(expr));
         }
 
         Ok(())
     }
 }
 
-#[derive(PartialEq)]
 pub enum ZStructAttribute {
     Option {
         presence: ZPresenceFlavour,
@@ -111,6 +115,7 @@ impl ZStructAttribute {
 }
 
 pub enum ZStructFieldKind {
+    Header,
     Flag,
     ZStruct {
         attr: ZStructAttribute,
@@ -180,19 +185,20 @@ impl ZStructField {
             }
         };
 
-        if let syn::Type::Path(tp) = ty
-            && tp
-                .path
-                .segments
-                .last()
-                .expect("The last segment of the path should be present.")
-                .ident
-                == "Flag"
-        {
-            return ZStructField {
-                kind: ZStructFieldKind::Flag,
-                access,
-            };
+        if let syn::Type::Path(tp) = ty {
+            let path = tp.path.segments.last().expect("Expected type path segment");
+
+            if path.ident == "Flag" {
+                return ZStructField {
+                    kind: ZStructFieldKind::Flag,
+                    access,
+                };
+            } else if path.ident == "Header" {
+                return ZStructField {
+                    kind: ZStructFieldKind::Header,
+                    access,
+                };
+            }
         }
 
         let attr = attrs
@@ -250,6 +256,11 @@ impl ZStruct {
             let zfield = ZStructField::from_field(field);
 
             match &zfield.kind {
+                ZStructFieldKind::Header => {
+                    if parsed_fields.len() != 0 {
+                        panic!("Header field must be defined at the beginning of the struct");
+                    }
+                }
                 ZStructFieldKind::Flag => {
                     if flag {
                         panic!("Only one Flag field is supported per struct");

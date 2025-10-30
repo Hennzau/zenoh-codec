@@ -42,7 +42,8 @@ pub trait ZExt: ZStruct {
 const FLAG_MANDATORY: u8 = 1 << 4;
 const FLAG_MORE: u8 = 1 << 7;
 
-pub trait ZExtMsg<Msg>: ZExt + ZStruct {
+/// Declare an extension as an attribute for <T>.
+pub trait ZExtAttribute<T>: ZExt + ZStruct {
     const ID: u8;
     const MANDATORY: bool;
 
@@ -66,4 +67,21 @@ pub trait ZExtMsg<Msg>: ZExt + ZStruct {
 
         Ok((<Self as ZExt>::z_decode(r)?, more))
     }
+}
+
+#[macro_export]
+macro_rules! zextattribute {
+    (impl<'a> $ext:ty, $t:ty, $id:expr, $m:expr) => {
+        impl<'a> zenoh_codec::ZExtAttribute<$t> for $ext {
+            const ID: u8 = $id;
+            const MANDATORY: bool = $m;
+        }
+    };
+
+    ($ext:ty, $t:ty, $id:expr, $m:expr) => {
+        impl zenoh_codec::ZExtAttribute<$t> for $ext {
+            const ID: u8 = $id;
+            const MANDATORY: bool = $m;
+        }
+    };
 }

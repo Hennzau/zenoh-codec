@@ -71,7 +71,9 @@ fn infer_kind(ext: &ZStruct) -> TokenStream {
         let kind = &ext.0.first().unwrap().kind;
 
         match kind {
-            ZStructFieldKind::Flag => panic!("ZExt cannot infer kind from flag field."),
+            ZStructFieldKind::Flag | ZStructFieldKind::Header => {
+                panic!("ZExt cannot infer kind from flag/header field.")
+            }
             ZStructFieldKind::ZStruct { ty, .. } => {
                 let ty = ty.to_string();
 

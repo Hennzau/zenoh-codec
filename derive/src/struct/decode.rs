@@ -6,8 +6,8 @@ use crate::r#struct::parse::{
 };
 
 pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
-    let mut decode_parts = Vec::new();
-    let mut result_parts = Vec::new();
+    let mut dec = Vec::new();
+    let mut res = Vec::new();
 
     for field in &r#struct.0 {
         let access = &field.access;
@@ -15,9 +15,14 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
 
         match kind {
             ZStructFieldKind::Flag => {
-                decode_parts.push(quote::quote! {
+                dec.push(quote::quote! {
                     #flag
-                    let #access = zenoh_codec::phantom::Flag {};
+                    let #access = zenoh_codec::marker::Flag;
+                });
+            }
+            ZStructFieldKind::Header => {
+                dec.push(quote::quote! {
+                    let #access = zenoh_codec::marker::Header;
                 });
             }
             ZStructFieldKind::ZStruct { attr, ty } => match attr {
@@ -25,15 +30,15 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
                     let presence_access =
                         Ident::new(&format!("presence_{}", access), Span::call_site());
 
-                    if *presence == ZPresenceFlavour::Plain {
-                        decode_parts.push(quote::quote! {
+                    if matches!(*presence, ZPresenceFlavour::Plain) {
+                        dec.push(quote::quote! {
                             let #presence_access: bool = <u8 as zenoh_codec::ZStruct>::z_decode(r)? != 0;
                         });
                     }
 
                     match size {
                         ZSizeFlavour::MaybeEmptyFlag(_) | ZSizeFlavour::NonEmptyFlag(_) => {
-                            decode_parts.push(quote::quote! {
+                            dec.push(quote::quote! {
                                 let #access = if #presence_access {
                                     Some(#access)
                                 } else {
@@ -42,7 +47,7 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
                             });
                         }
                         ZSizeFlavour::Plain => {
-                            decode_parts.push(quote::quote! {
+                            dec.push(quote::quote! {
                                 let #access = if #presence_access {
                                     Some(<usize as zenoh_codec::ZStruct>::z_decode(r)?)
                                 } else {
@@ -57,7 +62,7 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
                         ZSizeFlavour::Plain
                         | ZSizeFlavour::MaybeEmptyFlag(_)
                         | ZSizeFlavour::NonEmptyFlag(_) => {
-                            decode_parts.push(quote::quote! {
+                            dec.push(quote::quote! {
                                 let #access = match #access {
                                     Some(size) => {
                                         Some(< #ty as zenoh_codec::ZStruct>::z_decode(&mut < zenoh_codec::ZReader as zenoh_codec::ZReaderExt>::sub(r, size)?)?)
@@ -67,7 +72,7 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
                             });
                         }
                         ZSizeFlavour::None | ZSizeFlavour::Deduced => {
-                            decode_parts.push(quote::quote! {
+                            dec.push(quote::quote! {
                                 let #access = if #presence_access {
                                     Some(< #ty as zenoh_codec::ZStruct>::z_decode(r)?)
                                 } else {
@@ -79,7 +84,7 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
                 }
                 ZStructAttribute::Size(size) => {
                     if *size == ZSizeFlavour::Plain {
-                        decode_parts.push(quote::quote! {
+                        dec.push(quote::quote! {
                             let #access = <usize as zenoh_codec::ZStruct>::z_decode(r)?;
                         });
                     }
@@ -88,12 +93,12 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
                         ZSizeFlavour::Plain
                         | ZSizeFlavour::MaybeEmptyFlag(_)
                         | ZSizeFlavour::NonEmptyFlag(_) => {
-                            decode_parts.push(quote::quote! {
+                            dec.push(quote::quote! {
                                 let #access = < #ty as zenoh_codec::ZStruct>::z_decode(&mut < zenoh_codec::ZReader as zenoh_codec::ZReaderExt>::sub(r, #access)?)?;
                             });
                         }
                         ZSizeFlavour::None | ZSizeFlavour::Deduced => {
-                            decode_parts.push(quote::quote! {
+                            dec.push(quote::quote! {
                                 let #access = < #ty as zenoh_codec::ZStruct>::z_decode(r)?;
                             });
                         }
@@ -102,14 +107,14 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
             },
         }
 
-        result_parts.push(quote::quote! {
+        res.push(quote::quote! {
             #access
         });
     }
 
     quote::quote! {
-        #(#decode_parts)*
+        #(#dec)*
 
-        Ok(Self::ZType { #(#result_parts),* })
+        Ok(Self::ZType { #(#res),* })
     }
 }

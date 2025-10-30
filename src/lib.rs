@@ -38,7 +38,7 @@ pub use r#struct::*;
 pub mod ext;
 pub use ext::*;
 
-pub mod phantom;
+pub mod marker;
 
 pub type ZReader<'a> = &'a [u8];
 pub type ZWriter<'a> = &'a mut [u8];

@@ -1,6 +1,6 @@
 use core::fmt::Debug;
 
-use crate::{self as zenoh_codec, phantom};
+use crate::{self as zenoh_codec, marker};
 use crate::{ZReaderExt, ZStruct};
 
 #[derive(ZStruct, PartialEq, Debug)]
@@ -29,7 +29,7 @@ struct ZOptionPlain<'a> {
 
 #[derive(ZStruct, PartialEq, Debug)]
 struct ZOptionFlag<'a> {
-    _flag: phantom::Flag,
+    _flag: marker::Flag,
 
     #[option(flag)]
     pub maybe_byte: Option<u8>,
@@ -40,7 +40,7 @@ struct ZOptionFlag<'a> {
 
 #[derive(ZStruct, PartialEq, Debug)]
 struct ZOptionFlagDeduced<'a> {
-    _flag: phantom::Flag,
+    _flag: marker::Flag,
 
     #[option(flag, size(flag = 7))]
     pub maybe_slice: Option<&'a [u8]>,
@@ -75,7 +75,7 @@ struct ZNestedOption<'a> {
 
 #[derive(ZStruct, PartialEq, Debug)]
 struct ZFlagComplex<'a> {
-    _flag: phantom::Flag,
+    _flag: marker::Flag,
 
     #[option(flag)]
     pub maybe_u8: Option<u8>,
@@ -103,7 +103,7 @@ struct ZArrays<'a> {
 
 #[derive(ZStruct, PartialEq, Debug)]
 struct ZFlags<'a> {
-    _flag: phantom::Flag,
+    _flag: marker::Flag,
 
     #[option(flag)]
     pub small_opt: Option<u8>,
@@ -129,7 +129,7 @@ mod deep {
 struct ZComplex<'a> {
     pub id: u32,
     pub qos: u8,
-    _flag: phantom::Flag,
+    _flag: marker::Flag,
 
     #[option(flag)]
     pub opt_int: Option<u16>,
@@ -197,7 +197,7 @@ fn test_zoption_plain() {
 #[test]
 fn test_zoption_flag() {
     let s = ZOptionFlag {
-        _flag: phantom::Flag {},
+        _flag: marker::Flag,
         maybe_byte: Some(7),
         maybe_str: Some("flagged"),
     };
@@ -208,7 +208,7 @@ fn test_zoption_flag() {
 fn test_zoption_flag_deduced() {
     let buf = [1, 2, 3];
     let s = ZOptionFlagDeduced {
-        _flag: phantom::Flag {},
+        _flag: marker::Flag,
         maybe_slice: Some(&buf),
         trailing_data: "xyz",
     };
@@ -237,7 +237,7 @@ fn test_znested_option() {
 fn test_zflag_complex() {
     let buf = [5, 6, 7];
     let s = ZFlagComplex {
-        _flag: phantom::Flag {},
+        _flag: marker::Flag,
         maybe_u8: Some(1),
         maybe_slice: Some(&buf),
         maybe_str: Some("hi"),
@@ -261,7 +261,7 @@ fn test_zarrays() {
 fn test_zmultiple_flags() {
     let buf = [42; 4];
     let s = ZFlags {
-        _flag: phantom::Flag {},
+        _flag: marker::Flag,
         small_opt: Some(5),
         mid_opt: Some("flagged"),
         big_opt: Some(&buf),
@@ -284,7 +284,7 @@ fn test_zcomplex() {
     let s = ZComplex {
         id: 1,
         qos: 2,
-        _flag: phantom::Flag {},
+        _flag: marker::Flag,
         opt_int: Some(123),
         opt_str: Some("hello"),
         opt_inner: Some(opt_inner),
