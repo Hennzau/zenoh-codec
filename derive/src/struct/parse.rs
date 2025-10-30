@@ -60,6 +60,7 @@ impl ZPresenceFlavour {
     }
 }
 
+#[derive(PartialEq)]
 pub enum ZStructAttribute {
     Option {
         presence: ZPresenceFlavour,

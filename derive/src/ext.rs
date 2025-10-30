@@ -1,16 +1,12 @@
 use proc_macro2::TokenStream;
 use syn::DeriveInput;
 
-use crate::r#struct::parse::ZStruct;
+use crate::r#struct::{
+    decode, encode, flag, len,
+    parse::{ZStruct, ZStructFieldKind},
+};
 
-pub(crate) mod parse;
-
-pub(crate) mod decode;
-pub(crate) mod encode;
-pub(crate) mod flag;
-pub(crate) mod len;
-
-pub fn derive_zstruct(input: DeriveInput) -> TokenStream {
+pub fn derive_zext(input: DeriveInput) -> TokenStream {
     let ident = &input.ident;
     let data = &input.data;
 
@@ -37,6 +33,7 @@ pub fn derive_zstruct(input: DeriveInput) -> TokenStream {
     };
 
     let r#struct = ZStruct::from_data(data);
+    let kind = infer_kind(&r#struct);
 
     let (flag_enc, flag_dec) = flag::parse_body(&r#struct);
 
@@ -60,5 +57,34 @@ pub fn derive_zstruct(input: DeriveInput) -> TokenStream {
                 #decode_body
             }
         }
+
+        impl zenoh_codec::ZExt for #ident #ty_elided {
+            const KIND: zenoh_codec::ZExtKind = #kind;
+        }
+    }
+}
+
+fn infer_kind(ext: &ZStruct) -> TokenStream {
+    if ext.0.is_empty() {
+        quote::quote! { zenoh_codec::ZExtKind::Unit }
+    } else if ext.0.len() == 1 {
+        let kind = &ext.0.first().unwrap().kind;
+
+        match kind {
+            ZStructFieldKind::Flag => panic!("ZExt cannot infer kind from flag field."),
+            ZStructFieldKind::ZStruct { ty, .. } => {
+                let ty = ty.to_string();
+
+                if ty == "u8" {
+                    panic!("For now, U64 kind inference is limited to u16, u32, u64 and usize");
+                } else if ty == "u16" || ty == "u32" || ty == "u64" || ty == "usize" {
+                    quote::quote! { zenoh_codec::ZExtKind::U64 }
+                } else {
+                    quote::quote! { zenoh_codec::ZExtKind::ZStruct }
+                }
+            }
+        }
+    } else {
+        quote::quote! { zenoh_codec::ZExtKind::ZStruct }
     }
 }

@@ -5,9 +5,6 @@ use crate::inner::ZStruct1;
 mod inner {
     use zenoh_codec::ZStruct;
 
-    #[derive(ZStruct, PartialEq, Debug)]
-    pub struct Unit {}
-
     // Only no-lifetime or single-lifetime structs are supported.
     #[derive(ZStruct, PartialEq, Debug)]
     pub struct ZStruct1<'a> {

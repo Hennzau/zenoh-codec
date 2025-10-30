@@ -30,10 +30,13 @@
 pub use zenoh_codec_derive::*;
 
 #[cfg(test)]
-mod test;
+mod tests;
 
 pub mod r#struct;
 pub use r#struct::*;
+
+pub mod ext;
+pub use ext::*;
 
 pub mod phantom;
 
