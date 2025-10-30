@@ -160,6 +160,9 @@ impl<'a> ZWriterExt<'a> for ZWriter<'a> {
     }
 
     fn write(&mut self, src: &[u8]) -> ZResult<usize> {
+        if src.is_empty() {
+            return Ok(0);
+        }
         let len = self.len().min(src.len());
         if len == 0 {
             return Err(ZCodecError::CouldNotWrite);
