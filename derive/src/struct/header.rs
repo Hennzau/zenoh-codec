@@ -17,7 +17,6 @@ pub fn parse_body(r#struct: &ZStruct) -> (TokenStream, TokenStream) {
             ZStructFieldKind::Header => {
                 header = true;
             }
-            ZStructFieldKind::Flag => {}
             ZStructFieldKind::ZStruct {
                 attr: ZStructAttribute::Option { presence, .. },
                 ..

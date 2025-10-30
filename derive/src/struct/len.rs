@@ -12,9 +12,11 @@ pub fn parse_body(r#struct: &ZStruct) -> TokenStream {
         let kind = &field.kind;
 
         match kind {
-            ZStructFieldKind::Flag | ZStructFieldKind::Header => {
+            ZStructFieldKind::Flag
+            | ZStructFieldKind::Header
+            | ZStructFieldKind::ExtBlockBegin(ZPresenceFlavour::Plain) => {
                 len_parts.push(quote::quote! {
-                    1usize
+                    1usize // 1 byte!
                 });
             }
             ZStructFieldKind::ZStruct { attr, ty } => {
@@ -52,6 +54,7 @@ pub fn parse_body(r#struct: &ZStruct) -> TokenStream {
                     < #ty as zenoh_codec::ZStruct>::z_len(&self.#access)
                 });
             }
+            _ => {}
         }
     }
 

@@ -105,6 +105,7 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
                     }
                 }
             },
+            _ => {}
         }
 
         res.push(quote::quote! {

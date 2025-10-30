@@ -95,6 +95,7 @@ pub fn parse_body(r#struct: &ZStruct) -> (TokenStream, TokenStream) {
                     shift += size;
                 }
             }
+            _ => {}
         }
     }
 

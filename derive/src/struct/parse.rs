@@ -1,3 +1,5 @@
+use std::panic;
+
 use proc_macro2::TokenStream;
 use syn::{
     AngleBracketedGenericArguments, Attribute, Data, DataStruct, Expr, Field, Fields,
@@ -39,6 +41,7 @@ impl ZSizeFlavour {
     }
 }
 
+#[derive(Clone)]
 pub enum ZPresenceFlavour {
     Flag,
     Plain,
@@ -117,6 +120,9 @@ impl ZStructAttribute {
 pub enum ZStructFieldKind {
     Header,
     Flag,
+    ExtBlockBegin(ZPresenceFlavour),
+    ExtBlockEnd,
+
     ZStruct {
         attr: ZStructAttribute,
         ty: TokenStream,
@@ -198,6 +204,36 @@ impl ZStructField {
                     kind: ZStructFieldKind::Header,
                     access,
                 };
+            } else if path.ident == "ExtBlockBegin" {
+                let attr = attrs
+                    .iter()
+                    .find(|a| a.path().is_ident("option"))
+                    .expect("ExtBlockBegin marker expects an option attribute");
+
+                let mut presence_flavour = Option::<_>::None;
+                attr.parse_nested_meta(|meta| {
+                    ZPresenceFlavour::from_meta(&meta, &mut presence_flavour)
+                        .expect("Failed to parse presence flavour");
+                    Ok(())
+                })
+                .expect("Failed to parse nested meta attributes");
+
+                let presence_flavour =
+                    presence_flavour.expect("ExtBlockBegin marker expects a presence flavour");
+
+                if matches!(presence_flavour, ZPresenceFlavour::Flag) {
+                    panic!("Fow now ExtBlock presence can't be encoded in a flag. WIP")
+                }
+
+                return ZStructField {
+                    kind: ZStructFieldKind::ExtBlockBegin(presence_flavour),
+                    access,
+                };
+            } else if path.ident == "ExtBlockEnd" {
+                return ZStructField {
+                    kind: ZStructFieldKind::ExtBlockEnd,
+                    access,
+                };
             }
         }
 
@@ -246,6 +282,8 @@ impl ZStruct {
         let mut parsed_fields = Vec::<ZStructField>::new();
         let mut is_deduced = false;
         let mut flag = false;
+        let mut ext_block = false;
+        let mut header = false;
         let mut total_flag_bits = 0u8;
 
         for field in fields {
@@ -257,9 +295,15 @@ impl ZStruct {
 
             match &zfield.kind {
                 ZStructFieldKind::Header => {
+                    if header {
+                        panic!("Only one header field is supported per struct");
+                    }
+
                     if parsed_fields.len() != 0 {
                         panic!("Header field must be defined at the beginning of the struct");
                     }
+
+                    header = true;
                 }
                 ZStructFieldKind::Flag => {
                     if flag {
@@ -267,7 +311,38 @@ impl ZStruct {
                     }
                     flag = true;
                 }
+                ZStructFieldKind::ExtBlockBegin(presence) => {
+                    if ext_block {
+                        panic!(
+                            "ExtBlockBegin field appear before the end of a previously declarated block."
+                        );
+                    }
+
+                    if matches!(presence, ZPresenceFlavour::Flag) {
+                        if !flag {
+                            panic!("Flag field must be defined before using flag presence flavour")
+                        }
+                    }
+
+                    if matches!(presence, ZPresenceFlavour::Header(_)) {
+                        if !header {
+                            panic!(
+                                "Header field must be defined before using header presence flavour"
+                            )
+                        }
+                    }
+
+                    ext_block = true;
+                }
+                ZStructFieldKind::ExtBlockEnd => {
+                    ext_block = false;
+                }
                 ZStructFieldKind::ZStruct { attr, .. } => {
+                    if ext_block && matches!(attr, ZStructAttribute::Option { .. }) {
+                        panic!("Inside an ExtBlock fields mut not provide a presence flavour as it will
+                            be encoded as an ExtBlock");
+                    }
+
                     if let ZStructAttribute::Option {
                         presence: ZPresenceFlavour::Flag,
                         ..
@@ -302,6 +377,12 @@ impl ZStruct {
             }
 
             parsed_fields.push(zfield);
+        }
+
+        if ext_block {
+            panic!(
+                "ExtBlock is present but no ExtBlockEnd was provided to mark the end of the block"
+            );
         }
 
         if total_flag_bits > 8 {

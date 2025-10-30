@@ -76,8 +76,11 @@ fn infer_kind(ext: &ZStruct) -> TokenStream {
         let kind = &ext.0.first().unwrap().kind;
 
         match kind {
-            ZStructFieldKind::Flag | ZStructFieldKind::Header => {
-                panic!("ZExt cannot infer kind from flag/header field.")
+            ZStructFieldKind::Flag
+            | ZStructFieldKind::Header
+            | ZStructFieldKind::ExtBlockEnd
+            | ZStructFieldKind::ExtBlockBegin(_) => {
+                panic!("ZExt cannot infer kind from marker field.")
             }
             ZStructFieldKind::ZStruct { ty, .. } => {
                 let ty = ty.to_string();

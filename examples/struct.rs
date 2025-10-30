@@ -66,6 +66,8 @@ struct ZStruct2<'a> {
     pub field2: Option<inner::ZStruct1<'a>>,
 }
 
+const FLAG_2: u8 = 0b0100_0000;
+
 #[derive(ZStruct, PartialEq, Debug)]
 struct ZStruct3<'a> {
     _header: marker::Header,
@@ -77,7 +79,7 @@ struct ZStruct3<'a> {
     #[size(plain)]
     pub field1: inner::ZStruct1<'a>,
 
-    #[option(header = 0b0100_0000, size(deduced))]
+    #[option(header = FLAG_2, size(deduced))]
     pub field2: Option<ZStruct2<'a>>,
 }
 
