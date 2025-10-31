@@ -2,6 +2,52 @@
 
 A `#![no_std]`, `no_alloc` crate to write structs, extensions and messages for the Zenoh protocol in less than 1.5kloc.
 
+## Rules
+
+The rules of this codec are based on the current `zenoh-codec` crate to ensure compatibility with existing implementations.
+
+There are 2 kind of structs you can declare:
+- `#[derive(ZStruct)]`: this is a regular object that you can serialize/deserialize in a buffer.
+- `#[derive(ZExt)]`: this is a specialized `ZStruct` that can be used as an extension in a `ZStruct` later.
+
+The rules for a `ZStruct` are simple:
+- Only no-lifetime or single-lifetime structs are supported.
+- u8, u16, u32, u64, usize, [u8; N], &str and &[u8] implement `ZStruct`.
+- `Option<T>` implements `ZStruct` if T implements `ZStruct`.
+- Nested options are not supported.
+- Each field can specify how to encode/decode its size and/or presence (for `Option<T>`) using attributes:
+  - If no size attribute is specified the size flavour is `none`. Which means that when decoding the field should not rely on any size information.
+
+  - Supported size flavours are:
+    - `none`: no size information is stored.
+    - `plain`: size is stored as a plain `usize` before the field.
+    - `deduced`: size is deduced from the remaining buffer size.
+    - `eflag = N`: size is stored in N bits inside a flag field (see below).
+    - `flag = N`: (size - 1) is stored in N bits inside a flag field (see below), when decoding the final size is incremented by 1. It is useful when the size cannot be zero.
+
+  - Supported option flavours are:
+    - `plain`: presence is stored as a plain `u8` before the field.
+    - `flag`: presence is stored as 1 bit inside a flag field (see below).
+    - `header = MASK`: presence is stored in the header field using the provided bitmask.
+
+- A flag field is a field of type `marker::Flag` (u8) declared in the struct before any field using it. Each field using the flag attribute will consume bits from the flag from left to right.
+
+- A header field is a field of type `marker::Header` (u8) declared at the beginning of the struct. Each field using the header attribute will apply its bitmask to the header to determine presence.
+
+- An extension block is declared using a field of type `marker::ExtBlockBegin` and `marker::ExtBlockEnd`. Each extension inside the block should be an `Option<T>` where T implements `ZExt`.
+
+An extension block must specify how to encode/decode the presence/non presence of at least one extension inside using the option attribute on the `ExtBlockBegin` field. Supported flavours are:
+  - `plain`: presence is stored as a plain `u8` before the block.
+  - `flag`: presence is stored as 1 bit inside a flag field (see above).
+  - `header = MASK`: presence is stored in the header field using the provided bitmask.
+
+The rules for a `ZExt` are the same as for a `ZStruct`. However when you will want to use a `ZExt` inside
+a `ZStruct` you will need to declare its internal ID and if it is MANDATORY or not using the provided `zextattribute!` macro:
+
+```Rust
+zextattribute!(impl<'a> ZExtType<'a>, ParentZStructType<'a>, <internal_id on 4 bits>, <mandatory bool>);
+```
+
 ## Example
 
 Declare your structs and extensions using the provided `proc-macros`.

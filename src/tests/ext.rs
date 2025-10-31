@@ -245,4 +245,15 @@ fn test_zmsg_partial_exts() {
         trailing: "zzz",
     };
     roundtrip!(ZMsgComplex, msg);
+    let msg = ZMsgComplex {
+        _header: marker::Header,
+        name: "partial",
+        _begin: marker::ExtBlockBegin,
+        ext_info: None,
+        ext_data: None,
+        ext_empty: None,
+        _end: marker::ExtBlockEnd,
+        trailing: "zzz",
+    };
+    roundtrip!(ZMsgComplex, msg);
 }
