@@ -48,7 +48,7 @@ pub fn parse_body(r#struct: &ZStruct) -> (TokenStream, TokenStream) {
                 let paccess = Ident::new(&format!("presence_{}", access), Span::call_site());
 
                 dec.push(quote::quote! {
-                    let #paccess = (header & #expr) != 0;
+                    let mut #paccess = (header & #expr) != 0;
                 });
             }
             ZFieldKind::ZExtBlock { .. } => {}

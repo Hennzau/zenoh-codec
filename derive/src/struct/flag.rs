@@ -41,13 +41,13 @@ pub fn parse_body(r#struct: &ZStruct) -> (TokenStream, TokenStream) {
                     }
 
                     enc.push(quote::quote! {
-                        flag |= (n_exts > 0) as u8 << ( 8u8 - 1 - #shift );
+                        flag |= ((n_exts > 0) as u8) << ( 8u8 - 1 - #shift );
                     });
 
                     let paccess = Ident::new(&format!("presence_{}", access), Span::call_site());
 
                     dec.push(quote::quote! {
-                        let #paccess = ((flag >> ( 8u8 - 1 - #shift )) & 1) != 0;
+                        let mut #paccess = ((flag >> ( 8u8 - 1 - #shift )) & 1) != 0;
                     });
 
                     shift += 1;

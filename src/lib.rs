@@ -51,6 +51,8 @@ pub enum ZCodecError {
     CouldNotParse = 2,
 
     FieldExceedsReservedSize = 3,
+
+    MissingMandatoryExtension = 4,
 }
 
 pub type ZResult<T> = core::result::Result<T, ZCodecError>;
@@ -63,6 +65,9 @@ pub trait ZReaderExt<'a> {
     fn can_read(&self) -> bool {
         self.remaining().gt(&0)
     }
+
+    /// Peeks a u8 value without advancing the reader.
+    fn get_u8(&self) -> ZResult<u8>;
 
     fn read(&mut self, len: usize) -> ZResult<&'a [u8]>;
     fn read_u8(&mut self) -> ZResult<u8>;
@@ -100,6 +105,14 @@ impl<'a> ZReaderExt<'a> for ZReader<'a> {
 
     fn remaining(&self) -> usize {
         self.len()
+    }
+
+    fn get_u8(&self) -> ZResult<u8> {
+        if !self.can_read() {
+            return Err(ZCodecError::CouldNotRead);
+        }
+
+        Ok(unsafe { *self.get_unchecked(0) })
     }
 
     fn read_u8(&mut self) -> ZResult<u8> {

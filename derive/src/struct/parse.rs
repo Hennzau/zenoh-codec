@@ -145,6 +145,39 @@ impl ZStructFlavour {
     }
 }
 
+fn ty_to_ext_path(ty: &Type) -> TokenStream {
+    match ty {
+        Type::Path(tp) => {
+            let tp = tp
+                .path
+                .segments
+                .first()
+                .expect("Expected type path segment");
+            if tp.ident != "Option" {
+                panic!("Extension type must be Option<T>");
+            }
+
+            match &tp.arguments {
+                PathArguments::AngleBracketed(ab) => {
+                    let ab = ab.args.first().expect("Expected generic argument");
+                    match ab {
+                        GenericArgument::Type(ty) => match ty {
+                            Type::Path(tp) => {
+                                let path = remove_lt_from_path(tp.path.clone());
+                                quote::quote! { #path }
+                            }
+                            _ => panic!("Extension type must be a path"),
+                        },
+                        _ => panic!("Extension type must be Option<T>"),
+                    }
+                }
+                _ => panic!("Extension type must be Option<T>"),
+            }
+        }
+        _ => panic!("Extension type must be a path"),
+    }
+}
+
 fn remove_lt_from_path(mut path: Path) -> Path {
     match &mut path.segments.last_mut().unwrap().arguments {
         PathArguments::None => path,
@@ -329,7 +362,7 @@ impl ZStruct {
                     }
                     ext_block = false;
                 }
-                ZFieldKind::ZStruct(ZStructKind { flavour, ty }) => {
+                ZFieldKind::ZStruct(ZStructKind { flavour, .. }) => {
                     if ext_block {
                         if !matches!(flavour, ZStructFlavour::Size(ZSizeFlavour::None)) {
                             panic!("Fields inside ZExtBlock must have no size or option flavour");
@@ -338,7 +371,7 @@ impl ZStruct {
                         let kind = &mut parsed_fields.last_mut().unwrap().kind;
                         match kind {
                             ZFieldKind::ZExtBlock { exts, .. } => {
-                                let ty = ty.clone();
+                                let ty = ty_to_ext_path(&field.ty);
                                 let access = zfield.access.clone();
                                 exts.push(ZExtKind { ty, access });
                             }
@@ -384,6 +417,10 @@ impl ZStruct {
             }
 
             parsed_fields.push(zfield);
+        }
+
+        if ext_block {
+            panic!("ZExtBlockBegin without a matching ZExtBlockEnd");
         }
 
         if total_flag_bits > 8 {

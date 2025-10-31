@@ -151,7 +151,6 @@ struct ZComplex<'a> {
 struct ZHeader<'a> {
     _header: marker::Header,
 
-    // A header that will be used to store presence through bitmasking
     #[option(header = 0b1000_0000, size(plain))]
     pub keyexpr: Option<&'a str>,
 

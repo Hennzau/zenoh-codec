@@ -13,6 +13,10 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
         let access = &field.access;
         let kind = &field.kind;
 
+        declaration.push(quote::quote! {
+            #access
+        });
+
         match kind {
             ZFieldKind::Flag => {
                 dec.push(quote::quote! {
@@ -25,9 +29,54 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
                     let #access = zenoh_codec::marker::Header;
                 });
             }
-            ZFieldKind::ZExtBlock { .. } => {
+            ZFieldKind::ZExtBlock { flavour, exts } => {
                 dec.push(quote::quote! {
                     let #access = zenoh_codec::marker::ExtBlockBegin;
+                });
+
+                let paccess = Ident::new(&format!("presence_{}", access), Span::call_site());
+                if matches!(flavour, ZPresenceFlavour::Plain) {
+                    dec.push(quote::quote! {
+                        let mut #paccess: bool = <u8 as zenoh_codec::ZStruct>::z_decode(r)? != 0;
+                    });
+                }
+
+                let mut body = Vec::new();
+
+                for ext in exts {
+                    let access = &ext.access;
+                    let ty = &ext.ty;
+                    dec.push(quote::quote! {
+                        let mut #access: Option<#ty> = None;
+                    });
+
+                    declaration.push(quote::quote! {
+                        #access
+                    });
+
+                    body.push(quote::quote! {
+                        < #ty as zenoh_codec::ZExtAttribute<Self>>::ID => {
+                            #access = Some(< #ty as zenoh_codec::ZExtAttribute<Self>>::z_decode(r)?);
+                        }
+                    });
+                }
+
+                dec.push(quote::quote! {
+                    while #paccess {
+                        let (id, kind, mandatory, more) = zenoh_codec::decode_ext_header(r)?;
+                        #paccess = more;
+
+                        match id {
+                            #(#body),*,
+                            _ => {
+                                if mandatory {
+                                    return Err(zenoh_codec::ZCodecError::MissingMandatoryExtension);
+                                }
+
+                                zenoh_codec::ext::skip_ext(r, kind)?;
+                            }
+                        }
+                    }
                 });
             }
             ZFieldKind::ZExtBlockEnd => {
@@ -88,10 +137,6 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
                 }
             }
         }
-
-        declaration.push(quote::quote! {
-            #access
-        });
     }
 
     quote::quote! {

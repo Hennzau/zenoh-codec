@@ -17,9 +17,21 @@ pub fn parse_body(r#struct: &ZStruct) -> TokenStream {
                     1usize // 1 byte!
                 });
             }
-            ZFieldKind::ZExtBlock { flavour, .. } => {
+            ZFieldKind::ZExtBlock { flavour, exts } => {
                 if matches!(*flavour, ZPresenceFlavour::Plain) {
                     len_parts.push(quote::quote! { 1usize });
+                }
+
+                for ext in exts {
+                    let access = &ext.access;
+                    let ty = &ext.ty;
+                    len_parts.push(quote::quote! {
+                        if let Some(ext) = &self.#access {
+                            < #ty as zenoh_codec::ZExtAttribute<Self>>::z_len(ext)
+                        } else {
+                            0usize
+                        }
+                    });
                 }
             }
             ZFieldKind::ZExtBlockEnd => {}

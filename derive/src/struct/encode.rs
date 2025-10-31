@@ -38,10 +38,11 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
 
                 for ext in exts {
                     let access = &ext.access;
+                    let ty = &ext.ty;
                     enc.push(quote::quote! {
                         if let Some(ext) = &self.#access {
                             n_exts -= 1;
-                            < _ as zenoh_codec::ZExtAttribute<Self>>::z_encode(ext, w, n_exts != 0)?;
+                            < #ty as zenoh_codec::ZExtAttribute<Self>>::z_encode(ext, w, n_exts != 0)?;
                         }
                     });
                 }

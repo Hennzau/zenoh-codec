@@ -1,4 +1,4 @@
-use zenoh_codec::{ZExt, ZExtKind, ZStruct, marker, zextattribute};
+use zenoh_codec::{ZExt, ZExtKind, ZReaderExt, ZStruct, marker, zextattribute};
 
 // A ZExt is a specialized ZStruct so it must respect all the rules defined for ZStructs.
 // Depending on the fields present in the struct the ZExt will be specialized to one of the
@@ -34,7 +34,7 @@ pub struct ZExt4<'a> {
     pub data: &'a [u8],
 }
 
-#[derive(ZStruct)]
+#[derive(ZStruct, PartialEq, Debug)]
 pub struct Msg1<'a> {
     // A header acts like a flag but instead of fulling it from the left to the right, each field can apply a bitmask
     _header: marker::Header,
@@ -43,17 +43,21 @@ pub struct Msg1<'a> {
     field: &'a str,
 
     // Declare an extension block. Precise how to encode the presence/non presence
-    // of at least one extension inside.
+    // of at least one extension inside. (available are flag, header or plain)
     #[option(header = 0b1000_0000)]
     _begin: marker::ExtBlockBegin,
 
     // Extensions in an ExtBlock should always be an option. Failing to do so will result in
-    // a compile error.
+    // a compile error but there is no good error message yet.
     pub ext1: Option<ZExt1<'a>>,
     pub ext2: Option<ZExt2>,
 
     // You should always mark the end of an ext block.
     _end: marker::ExtBlockEnd,
+
+    // You can have other fields after the ext block. You can even have multiple ext blocks.
+    #[size(deduced)]
+    payload: &'a [u8],
 }
 
 zextattribute!(impl<'a> ZExt1<'a>, Msg1<'a>, 0x1, true);
@@ -64,4 +68,29 @@ fn main() {
     assert_eq!(ZExt2::KIND, ZExtKind::U64);
     assert_eq!(ZExt3::KIND, ZExtKind::Unit);
     assert_eq!(ZExt4::KIND, ZExtKind::ZStruct);
+
+    let x = Msg1 {
+        _header: marker::Header,
+        field: "hello",
+        _begin: marker::ExtBlockBegin,
+        ext1: Some(ZExt1 {
+            sn: 42,
+            qos: 1,
+            keyexpr: "/foo/bar",
+        }),
+        ext2: Some(ZExt2 { sn: 7 }),
+        _end: marker::ExtBlockEnd,
+        payload: &[1, 2, 3, 4],
+    };
+
+    let mut data = [0u8; 128];
+    let mut writer = &mut data.as_mut_slice();
+
+    let len = <Msg1 as ZStruct>::z_len(&x);
+    <Msg1 as ZStruct>::z_encode(&x, &mut writer).unwrap();
+
+    let mut reader = data.as_slice();
+    let decoded = <Msg1 as ZStruct>::z_decode(&mut reader.sub(len).unwrap()).unwrap();
+
+    assert_eq!(x, decoded);
 }
