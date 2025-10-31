@@ -1,10 +1,156 @@
 # zenoh-codec
 
-A `#![no_std]`, `no_alloc` crate to write structs, extensions and messages for the Zenoh protocol.
+A `#![no_std]`, `no_alloc` crate to write structs, extensions and messages for the Zenoh protocol in less than 1.5kloc.
 
 ## Example
 
+Declare your structs and extensions using the provided `proc-macros`.
 
+```Rust
+// Only no-lifetime or single-lifetime structs are supported.
+#[derive(ZStruct, PartialEq, Debug)]
+pub struct ZStruct1<'a> {
+    // Fields with fixed sized should not mention a size attribute. If nothing
+    // is specified the size flavour is `none`. Which means that when decoding
+    // the field should not rely on any size information.
+    pub sn: u32,
+
+    // Just to illustrate that size(none) is equivalent to not specifying anything
+    #[size(none)]
+    pub qos: u8,
+
+    // A fixed sized array of 3 bytes. You don't need to specify any size attribute here.
+    pub array: [u8; 3],
+
+    // An optional field should always specify its option flavour, otherwise it
+    // will not compile. Nested options are not supported.
+    //
+    // There is no good error message for those two cases yet.
+    //
+    // Option with presence stored as a plain u8 before the field
+    #[option(plain)]
+    pub opt: Option<[u8; 5]>,
+
+    // size stored as a plain usize before the field if present
+    // presence stored as a plain u8 before the size
+    #[option(plain, size(plain))]
+    pub opt2: Option<&'a str>,
+
+    // size deduced from the remaining buffer size
+    #[size(deduced)]
+    pub keyexpr: &'a str,
+}
+
+#[derive(ZStruct, PartialEq, Debug)]
+struct ZStruct2<'a> {
+    // Fields with fixed sized should not mention a size attribute. If nothing
+    // is specified the size flavour is `none`. Which means that when decoding
+    // the field should not rely on any size information.
+    pub sn: u32,
+    pub qos: u8,
+
+    // Declare a 8-bit flag to store presence/size bits. Available sizes are u8, u16, u32, u64. (Internally for > u8, it will encode it as VLE)
+    _flag: marker::Flag,
+
+    // optional presence stored as 1 bit in the flag
+    // 6 bits to store the size in the flag
+    #[option(flag, size(eflag = 6))]
+    pub keyexpr: Option<&'a str>,
+
+    // size stored as a plain usize before the field
+    #[size(plain)]
+    pub field1: ZStruct1<'a>,
+
+    // optional presence stored as 1 bit in the flag and
+    // 4 bits to store the size of the field in the flag as well
+    #[option(flag, size(deduced))]
+    pub field2: Option<ZStruct1<'a>>,
+}
+
+// A ZExt is a specialized ZStruct so it must respect all the rules defined for ZStructs.
+// Depending on the fields present in the struct the ZExt will be specialized to one of the
+// three kinds defined in ZExtKind.
+//
+// - Unit: if the struct has no fields.
+// - U64: if the struct has only fixed size fields (u16, u32, u64, usize).
+// - ZStruct: the rest of the cases.
+#[derive(ZExt, PartialEq, Debug)]
+pub struct ZExt1<'a> {
+    pub sn: u32,
+    pub qos: u8,
+
+    #[size(deduced)]
+    pub keyexpr: &'a str,
+}
+
+#[derive(ZExt, PartialEq, Debug)]
+pub struct ZExt2 {
+    // Only one fixed size field to be specialized as U64 kind.
+    pub sn: u32,
+}
+
+// A ZMsg is in fact a regular ZStruct. So yes you can have a ZMsg which is in fact a ZExt of another ZMsg.
+#[derive(ZStruct, PartialEq, Debug)]
+pub struct Msg1<'a> {
+    // A header acts like a flag but instead of fulling it from the left to the right, each field can apply a bitmask
+    _header: marker::Header,
+
+    #[size(plain)]
+    field: &'a str,
+
+    // Declare an extension block. Precise how to encode the presence/non presence
+    // of at least one extension inside. (available are flag, header or plain)
+    #[option(header = 0b1000_0000)]
+    _begin: marker::ExtBlockBegin,
+
+    // Extensions in an ExtBlock should always be an option. Failing to do so will result in
+    // a compile error but there is no good error message yet.
+    pub ext1: Option<ZExt1<'a>>,
+    pub ext2: Option<ZExt2>,
+
+    // You should always mark the end of an ext block.
+    _end: marker::ExtBlockEnd,
+
+    // You can have other fields after the ext block. You can even have multiple ext blocks.
+    #[size(deduced)]
+    payload: &'a [u8],
+}
+
+// For this ZStruct/ZMsg declare the internal ID and MANDATORY flag.
+zextattribute!(impl<'a> ZExt1<'a>, Msg1<'a>, 0x1, true);
+zextattribute!(impl<'a> ZExt2, Msg1<'a>, 0x2, true);
+```
+
+Once declared you can use the generated methods to encode/decode your structs and extensions.
+
+```Rust
+let x = Msg1 {
+    _header: marker::Header,
+    field: "hello",
+    _begin: marker::ExtBlockBegin,
+    ext1: Some(ZExt1 {
+        sn: 42,
+        qos: 1,
+        keyexpr: "/foo/bar",
+    }),
+    ext2: Some(ZExt2 { sn: 7 }),
+    _end: marker::ExtBlockEnd,
+    payload: &[1, 2, 3, 4],
+};
+
+let mut data = [0u8; 128];
+let mut writer = &mut data.as_mut_slice();
+
+// Because Msg1 uses a deduced flavor for its last field we need to store the length to decode it later.
+let len = <Msg1 as ZStruct>::z_len(&x);
+<Msg1 as ZStruct>::z_encode(&x, &mut writer).unwrap();
+
+let mut reader = data.as_slice();
+// Resize the reader to only the encoded part so that deduced sizes work correctly.
+let decoded = <Msg1 as ZStruct>::z_decode(&mut reader.sub(len).unwrap()).unwrap();
+
+assert_eq!(x, decoded);
+```
 
 ## Maintainability
 

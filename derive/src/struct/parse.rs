@@ -338,7 +338,7 @@ impl ZStruct {
                         panic!("Only one header field is supported per struct");
                     }
 
-                    if parsed_fields.len() != 0 {
+                    if !parsed_fields.is_empty() {
                         panic!("Header field must be defined at the beginning of the struct");
                     }
 

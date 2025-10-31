@@ -86,7 +86,7 @@ pub trait ZExtAttribute<T>: ZExt + ZStruct {
     fn z_decode<'a>(r: &mut ZReader<'a>) -> ZResult<Self::ZType<'a>> {
         let _ = <u8 as ZStruct>::z_decode(r)?;
 
-        Ok(<Self as ZExt>::z_decode(r)?)
+        <Self as ZExt>::z_decode(r)
     }
 }
 

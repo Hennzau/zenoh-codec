@@ -1,5 +1,9 @@
 test:
     cargo test
 
-bench:
-    cargo test --profile=release bench -- --nocapture --ignored
+tokei:
+    tokei derive src --exclude src/tests.rs --exclude src/tests/
+
+clippy:
+    cargo clippy --fix --lib --allow-dirty --allow-staged
+    cd derive && cargo clippy --fix --lib --allow-dirty --allow-staged
