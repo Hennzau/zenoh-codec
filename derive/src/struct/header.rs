@@ -1,7 +1,7 @@
 use proc_macro2::{Span, TokenStream};
 use syn::Ident;
 
-use crate::r#struct::parse::{ZPresenceFlavour, ZStruct, ZStructAttribute, ZStructFieldKind};
+use crate::r#struct::parse::{ZFieldKind, ZPresenceFlavour, ZStruct, ZStructFlavour, ZStructKind};
 
 pub fn parse_body(r#struct: &ZStruct) -> (TokenStream, TokenStream) {
     let mut enc = Vec::new();
@@ -14,13 +14,13 @@ pub fn parse_body(r#struct: &ZStruct) -> (TokenStream, TokenStream) {
         let kind = &field.kind;
 
         match kind {
-            ZStructFieldKind::Header => {
+            ZFieldKind::Header => {
                 header = true;
             }
-            ZStructFieldKind::ZStruct {
-                attr: ZStructAttribute::Option { presence, .. },
+            ZFieldKind::ZStruct(ZStructKind {
+                flavour: ZStructFlavour::Option { presence, .. },
                 ..
-            } => match presence {
+            }) => match presence {
                 ZPresenceFlavour::Header(expr) => {
                     if !header {
                         panic!(

@@ -147,6 +147,21 @@ struct ZComplex<'a> {
     pub trailing: &'a str,
 }
 
+#[derive(ZStruct, PartialEq, Debug)]
+struct ZHeader<'a> {
+    _header: marker::Header,
+
+    // A header that will be used to store presence through bitmasking
+    #[option(header = 0b1000_0000, size(plain))]
+    pub keyexpr: Option<&'a str>,
+
+    #[size(plain)]
+    pub field1: deep::Inner<'a>,
+
+    #[option(header = 0b0100_0000, size(deduced))]
+    pub field2: Option<ZComplex<'a>>,
+}
+
 macro_rules! roundtrip {
     ($ty:ty, $value:expr) => {{
         let mut data = [0u8; 256];
@@ -292,4 +307,36 @@ fn test_zcomplex() {
         trailing: "world",
     };
     roundtrip!(ZComplex, s);
+}
+
+#[test]
+fn test_zheader() {
+    let buf = [1, 2, 3, 4];
+    let opt_inner = deep::Inner {
+        seq: 42,
+        data: &buf,
+    };
+
+    let inner = deep::Inner {
+        seq: 99,
+        data: &buf,
+    };
+    let s = ZComplex {
+        id: 1,
+        qos: 2,
+        _flag: marker::Flag,
+        opt_int: Some(123),
+        opt_str: Some("hello"),
+        opt_inner: Some(opt_inner),
+        inner,
+        trailing: "world",
+    };
+    let header = ZHeader {
+        _header: marker::Header,
+        keyexpr: Some("key.expr"),
+        field1: deep::Inner { seq: 7, data: &buf },
+        field2: Some(s),
+    };
+
+    roundtrip!(ZHeader, header);
 }

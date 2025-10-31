@@ -7,13 +7,46 @@ use syn::{
 };
 
 #[derive(PartialEq)]
-pub enum ZSizeFlavour {
+pub(crate) enum ZSizeFlavour {
     Plain,
     Deduced,
     NonEmptyFlag(u8),
     MaybeEmptyFlag(u8),
     None,
 }
+
+#[derive(Clone)]
+pub(crate) enum ZPresenceFlavour {
+    Flag,
+    Plain,
+    Header(Expr),
+}
+
+pub(crate) enum ZStructFlavour {
+    Option {
+        presence: ZPresenceFlavour,
+        size: ZSizeFlavour,
+    },
+    Size(ZSizeFlavour),
+}
+
+pub(crate) struct ZStructKind {
+    pub flavour: ZStructFlavour,
+    pub ty: TokenStream,
+}
+
+pub(crate) enum ZFieldKind {
+    Header,
+    Flag,
+    ZStruct(ZStructKind),
+}
+
+pub(crate) struct ZField {
+    pub kind: ZFieldKind,
+    pub access: TokenStream,
+}
+
+pub struct ZStruct(pub Vec<ZField>);
 
 impl ZSizeFlavour {
     fn from_meta(meta: &ParseNestedMeta, flavour: &mut Option<ZSizeFlavour>) -> syn::Result<()> {
@@ -41,13 +74,6 @@ impl ZSizeFlavour {
     }
 }
 
-#[derive(Clone)]
-pub enum ZPresenceFlavour {
-    Flag,
-    Plain,
-    Header(Expr),
-}
-
 impl ZPresenceFlavour {
     fn from_meta(
         meta: &ParseNestedMeta,
@@ -68,17 +94,9 @@ impl ZPresenceFlavour {
     }
 }
 
-pub enum ZStructAttribute {
-    Option {
-        presence: ZPresenceFlavour,
-        size: ZSizeFlavour,
-    },
-    Size(ZSizeFlavour),
-}
-
-impl ZStructAttribute {
-    fn from_attr(attr: &Attribute) -> ZStructAttribute {
-        let mut struct_attr = Option::<ZStructAttribute>::None;
+impl ZStructFlavour {
+    fn from_attr(attr: &Attribute) -> ZStructFlavour {
+        let mut struct_attr = Option::<ZStructFlavour>::None;
 
         if attr.path().is_ident("option") {
             let mut presence_flavour = Option::<ZPresenceFlavour>::None;
@@ -97,7 +115,7 @@ impl ZStructAttribute {
             })
             .expect("Failed to parse struct attribute");
 
-            struct_attr.replace(ZStructAttribute::Option {
+            struct_attr.replace(ZStructFlavour::Option {
                 presence: presence_flavour
                     .expect("Option struct expected to have a presence flavour"),
                 size: size_flavour.unwrap_or(ZSizeFlavour::None),
@@ -108,30 +126,13 @@ impl ZStructAttribute {
             attr.parse_nested_meta(|meta| ZSizeFlavour::from_meta(&meta, &mut size_flavour))
                 .expect("Failed to parse struct attribute");
 
-            struct_attr.replace(ZStructAttribute::Size(
+            struct_attr.replace(ZStructFlavour::Size(
                 size_flavour.expect("Struct expected to have a size flavour"),
             ));
         }
 
         struct_attr.expect("Struct expected to have either option or size attribute")
     }
-}
-
-pub enum ZStructFieldKind {
-    Header,
-    Flag,
-    ExtBlockBegin(ZPresenceFlavour),
-    ExtBlockEnd,
-
-    ZStruct {
-        attr: ZStructAttribute,
-        ty: TokenStream,
-    },
-}
-
-pub struct ZStructField {
-    pub kind: ZStructFieldKind,
-    pub access: TokenStream,
 }
 
 fn remove_lt_from_path(mut path: Path) -> Path {
@@ -180,8 +181,8 @@ fn remove_lt_from_path(mut path: Path) -> Path {
     }
 }
 
-impl ZStructField {
-    fn from_field(field: &Field) -> ZStructField {
+impl ZField {
+    fn from_field(field: &Field) -> ZField {
         let ty = &field.ty;
         let attrs = &field.attrs;
         let access = match &field.ident {
@@ -195,43 +196,13 @@ impl ZStructField {
             let path = tp.path.segments.last().expect("Expected type path segment");
 
             if path.ident == "Flag" {
-                return ZStructField {
-                    kind: ZStructFieldKind::Flag,
+                return ZField {
+                    kind: ZFieldKind::Flag,
                     access,
                 };
             } else if path.ident == "Header" {
-                return ZStructField {
-                    kind: ZStructFieldKind::Header,
-                    access,
-                };
-            } else if path.ident == "ExtBlockBegin" {
-                let attr = attrs
-                    .iter()
-                    .find(|a| a.path().is_ident("option"))
-                    .expect("ExtBlockBegin marker expects an option attribute");
-
-                let mut presence_flavour = Option::<_>::None;
-                attr.parse_nested_meta(|meta| {
-                    ZPresenceFlavour::from_meta(&meta, &mut presence_flavour)
-                        .expect("Failed to parse presence flavour");
-                    Ok(())
-                })
-                .expect("Failed to parse nested meta attributes");
-
-                let presence_flavour =
-                    presence_flavour.expect("ExtBlockBegin marker expects a presence flavour");
-
-                if matches!(presence_flavour, ZPresenceFlavour::Flag) {
-                    panic!("Fow now ExtBlock presence can't be encoded in a flag. WIP")
-                }
-
-                return ZStructField {
-                    kind: ZStructFieldKind::ExtBlockBegin(presence_flavour),
-                    access,
-                };
-            } else if path.ident == "ExtBlockEnd" {
-                return ZStructField {
-                    kind: ZStructFieldKind::ExtBlockEnd,
+                return ZField {
+                    kind: ZFieldKind::Header,
                     access,
                 };
             }
@@ -240,8 +211,8 @@ impl ZStructField {
         let attr = attrs
             .iter()
             .find(|a| a.path().is_ident("option") || a.path().is_ident("size"))
-            .map(ZStructAttribute::from_attr)
-            .unwrap_or(ZStructAttribute::Size(ZSizeFlavour::None));
+            .map(ZStructFlavour::from_attr)
+            .unwrap_or(ZStructFlavour::Size(ZSizeFlavour::None));
 
         let ty = match ty {
             Type::Array(ty) => {
@@ -268,21 +239,18 @@ impl ZStructField {
             _ => panic!("Unsupported field type in ZStruct"),
         };
 
-        ZStructField {
-            kind: ZStructFieldKind::ZStruct { attr, ty },
+        ZField {
+            kind: ZFieldKind::ZStruct(ZStructKind { flavour: attr, ty }),
             access,
         }
     }
 }
 
-pub struct ZStruct(pub Vec<ZStructField>);
-
 impl ZStruct {
     fn from_fields<'a>(fields: impl Iterator<Item = &'a Field>) -> ZStruct {
-        let mut parsed_fields = Vec::<ZStructField>::new();
+        let mut parsed_fields = Vec::<ZField>::new();
         let mut is_deduced = false;
         let mut flag = false;
-        let mut ext_block = false;
         let mut header = false;
         let mut total_flag_bits = 0u8;
 
@@ -291,10 +259,10 @@ impl ZStruct {
                 panic!("Deduced size flavour must appear once at the end of the struct");
             }
 
-            let zfield = ZStructField::from_field(field);
+            let zfield = ZField::from_field(field);
 
             match &zfield.kind {
-                ZStructFieldKind::Header => {
+                ZFieldKind::Header => {
                     if header {
                         panic!("Only one header field is supported per struct");
                     }
@@ -305,45 +273,14 @@ impl ZStruct {
 
                     header = true;
                 }
-                ZStructFieldKind::Flag => {
+                ZFieldKind::Flag => {
                     if flag {
                         panic!("Only one Flag field is supported per struct");
                     }
                     flag = true;
                 }
-                ZStructFieldKind::ExtBlockBegin(presence) => {
-                    if ext_block {
-                        panic!(
-                            "ExtBlockBegin field appear before the end of a previously declarated block."
-                        );
-                    }
-
-                    if matches!(presence, ZPresenceFlavour::Flag) {
-                        if !flag {
-                            panic!("Flag field must be defined before using flag presence flavour")
-                        }
-                    }
-
-                    if matches!(presence, ZPresenceFlavour::Header(_)) {
-                        if !header {
-                            panic!(
-                                "Header field must be defined before using header presence flavour"
-                            )
-                        }
-                    }
-
-                    ext_block = true;
-                }
-                ZStructFieldKind::ExtBlockEnd => {
-                    ext_block = false;
-                }
-                ZStructFieldKind::ZStruct { attr, .. } => {
-                    if ext_block && matches!(attr, ZStructAttribute::Option { .. }) {
-                        panic!("Inside an ExtBlock fields mut not provide a presence flavour as it will
-                            be encoded as an ExtBlock");
-                    }
-
-                    if let ZStructAttribute::Option {
+                ZFieldKind::ZStruct(ZStructKind { flavour: attr, .. }) => {
+                    if let ZStructFlavour::Option {
                         presence: ZPresenceFlavour::Flag,
                         ..
                     } = attr
@@ -356,8 +293,8 @@ impl ZStruct {
                     }
 
                     match attr {
-                        ZStructAttribute::Size(flavour)
-                        | ZStructAttribute::Option { size: flavour, .. } => match flavour {
+                        ZStructFlavour::Size(flavour)
+                        | ZStructFlavour::Option { size: flavour, .. } => match flavour {
                             ZSizeFlavour::Deduced => {
                                 is_deduced = true;
                             }
@@ -377,12 +314,6 @@ impl ZStruct {
             }
 
             parsed_fields.push(zfield);
-        }
-
-        if ext_block {
-            panic!(
-                "ExtBlock is present but no ExtBlockEnd was provided to mark the end of the block"
-            );
         }
 
         if total_flag_bits > 8 {

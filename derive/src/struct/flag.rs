@@ -2,7 +2,7 @@ use proc_macro2::{Span, TokenStream};
 use syn::Ident;
 
 use crate::r#struct::parse::{
-    ZPresenceFlavour, ZSizeFlavour, ZStruct, ZStructAttribute, ZStructFieldKind,
+    ZFieldKind, ZPresenceFlavour, ZSizeFlavour, ZStruct, ZStructFlavour, ZStructKind,
 };
 
 pub fn parse_body(r#struct: &ZStruct) -> (TokenStream, TokenStream) {
@@ -17,16 +17,16 @@ pub fn parse_body(r#struct: &ZStruct) -> (TokenStream, TokenStream) {
         let kind = &field.kind;
 
         match kind {
-            ZStructFieldKind::Header => {}
-            ZStructFieldKind::Flag => {
+            ZFieldKind::Header => {}
+            ZFieldKind::Flag => {
                 flag = true;
             }
-            ZStructFieldKind::ZStruct { attr, ty } => {
+            ZFieldKind::ZStruct(ZStructKind { flavour: attr, ty }) => {
                 let (presence, size) = match attr {
-                    ZStructAttribute::Option { presence, size } => {
+                    ZStructFlavour::Option { presence, size } => {
                         (matches!(*presence, ZPresenceFlavour::Flag), size)
                     }
-                    ZStructAttribute::Size(size) => (false, size),
+                    ZStructFlavour::Size(size) => (false, size),
                 };
 
                 let (sized, size, maybe_empty) = match size {
@@ -95,7 +95,6 @@ pub fn parse_body(r#struct: &ZStruct) -> (TokenStream, TokenStream) {
                     shift += size;
                 }
             }
-            _ => {}
         }
     }
 

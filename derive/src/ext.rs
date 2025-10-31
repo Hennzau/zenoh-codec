@@ -3,7 +3,7 @@ use syn::DeriveInput;
 
 use crate::r#struct::{
     decode, encode, flag, header, len,
-    parse::{ZStruct, ZStructFieldKind},
+    parse::{ZFieldKind, ZStruct, ZStructKind},
 };
 
 pub fn derive_zext(input: DeriveInput) -> TokenStream {
@@ -76,13 +76,10 @@ fn infer_kind(ext: &ZStruct) -> TokenStream {
         let kind = &ext.0.first().unwrap().kind;
 
         match kind {
-            ZStructFieldKind::Flag
-            | ZStructFieldKind::Header
-            | ZStructFieldKind::ExtBlockEnd
-            | ZStructFieldKind::ExtBlockBegin(_) => {
-                panic!("ZExt cannot infer kind from marker field.")
+            ZFieldKind::Flag | ZFieldKind::Header => {
+                panic!("ZExt cannot infer kind from one marker field.")
             }
-            ZStructFieldKind::ZStruct { ty, .. } => {
+            ZFieldKind::ZStruct(ZStructKind { ty, .. }) => {
                 let ty = ty.to_string();
 
                 if ty == "u8" {

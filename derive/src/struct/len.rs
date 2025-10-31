@@ -1,7 +1,7 @@
 use proc_macro2::TokenStream;
 
 use crate::r#struct::parse::{
-    ZPresenceFlavour, ZSizeFlavour, ZStruct, ZStructAttribute, ZStructFieldKind,
+    ZFieldKind, ZPresenceFlavour, ZSizeFlavour, ZStruct, ZStructFlavour, ZStructKind,
 };
 
 pub fn parse_body(r#struct: &ZStruct) -> TokenStream {
@@ -12,20 +12,18 @@ pub fn parse_body(r#struct: &ZStruct) -> TokenStream {
         let kind = &field.kind;
 
         match kind {
-            ZStructFieldKind::Flag
-            | ZStructFieldKind::Header
-            | ZStructFieldKind::ExtBlockBegin(ZPresenceFlavour::Plain) => {
+            ZFieldKind::Flag | ZFieldKind::Header => {
                 len_parts.push(quote::quote! {
                     1usize // 1 byte!
                 });
             }
-            ZStructFieldKind::ZStruct { attr, ty } => {
+            ZFieldKind::ZStruct(ZStructKind { flavour: attr, ty }) => {
                 let (presence, size) = match attr {
-                    ZStructAttribute::Option { presence, size } => (
+                    ZStructFlavour::Option { presence, size } => (
                         matches!(*presence, ZPresenceFlavour::Plain),
                         matches!(*size, ZSizeFlavour::Plain),
                     ),
-                    ZStructAttribute::Size(size) => (false, matches!(*size, ZSizeFlavour::Plain)),
+                    ZStructFlavour::Size(size) => (false, matches!(*size, ZSizeFlavour::Plain)),
                 };
 
                 if presence {
@@ -54,7 +52,6 @@ pub fn parse_body(r#struct: &ZStruct) -> TokenStream {
                     < #ty as zenoh_codec::ZStruct>::z_len(&self.#access)
                 });
             }
-            _ => {}
         }
     }
 
