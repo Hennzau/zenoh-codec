@@ -17,6 +17,12 @@ pub fn parse_body(r#struct: &ZStruct) -> TokenStream {
                     1usize // 1 byte!
                 });
             }
+            ZFieldKind::ZExtBlock { flavour, .. } => {
+                if matches!(*flavour, ZPresenceFlavour::Plain) {
+                    len_parts.push(quote::quote! { 1usize });
+                }
+            }
+            ZFieldKind::ZExtBlockEnd => {}
             ZFieldKind::ZStruct(ZStructKind { flavour: attr, ty }) => {
                 let (presence, size) = match attr {
                     ZStructFlavour::Option { presence, size } => (

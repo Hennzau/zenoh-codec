@@ -21,6 +21,39 @@ pub fn parse_body(r#struct: &ZStruct) -> (TokenStream, TokenStream) {
             ZFieldKind::Flag => {
                 flag = true;
             }
+            ZFieldKind::ZExtBlock { flavour, exts } => {
+                if matches!(*flavour, ZPresenceFlavour::Flag) {
+                    if !flag {
+                        panic!("Flag field must be defined before any field using flag encoding.");
+                    }
+
+                    enc.push(quote::quote! {
+                        let mut n_exts = 0usize;
+                    });
+
+                    for ext in exts {
+                        let access = &ext.access;
+                        enc.push(quote::quote! {
+                            if self.#access.is_some() {
+                                n_exts += 1;
+                            }
+                        });
+                    }
+
+                    enc.push(quote::quote! {
+                        flag |= (n_exts > 0) as u8 << ( 8u8 - 1 - #shift );
+                    });
+
+                    let paccess = Ident::new(&format!("presence_{}", access), Span::call_site());
+
+                    dec.push(quote::quote! {
+                        let #paccess = ((flag >> ( 8u8 - 1 - #shift )) & 1) != 0;
+                    });
+
+                    shift += 1;
+                }
+            }
+            ZFieldKind::ZExtBlockEnd => {}
             ZFieldKind::ZStruct(ZStructKind { flavour: attr, ty }) => {
                 let (presence, size) = match attr {
                     ZStructFlavour::Option { presence, size } => {

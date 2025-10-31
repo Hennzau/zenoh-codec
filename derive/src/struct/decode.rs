@@ -25,6 +25,16 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
                     let #access = zenoh_codec::marker::Header;
                 });
             }
+            ZFieldKind::ZExtBlock { .. } => {
+                dec.push(quote::quote! {
+                    let #access = zenoh_codec::marker::ExtBlockBegin;
+                });
+            }
+            ZFieldKind::ZExtBlockEnd => {
+                dec.push(quote::quote! {
+                    let #access = zenoh_codec::marker::ExtBlockEnd;
+                });
+            }
             ZFieldKind::ZStruct(ZStructKind { flavour, ty }) => {
                 let paccess = Ident::new(&format!("presence_{}", access), Span::call_site());
                 let paccess = quote::quote! { #paccess };
@@ -46,7 +56,7 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
                 };
                 let decode = quote::quote! { < #ty as zenoh_codec::ZStruct>::z_decode(&mut < zenoh_codec::ZReader as zenoh_codec::ZReaderExt>::sub(r, #access)?)? };
                 let decode_size = quote::quote! { < usize as zenoh_codec::ZStruct>::z_decode(r)? };
-                let decode_plain = quote::quote! { < #ty as zenoh_codec::ZStruct>::z_decode(r)? };
+                let deduce = quote::quote! { < #ty as zenoh_codec::ZStruct>::z_decode(r)? };
 
                 match size {
                     ZSizeFlavour::MaybeEmptyFlag(_) | ZSizeFlavour::NonEmptyFlag(_) => {
@@ -69,9 +79,9 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
                     }
                     ZSizeFlavour::None | ZSizeFlavour::Deduced => {
                         dec.push(p_fn(
-                            pa_fn(&decode_plain),
+                            pa_fn(&deduce),
                             quote::quote! {
-                                let #access = #decode_plain;
+                                let #access = #deduce;
                             },
                         ));
                     }

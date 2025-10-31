@@ -39,18 +39,21 @@ pub struct Msg1<'a> {
     // A header acts like a flag but instead of fulling it from the left to the right, each field can apply a bitmask
     _header: marker::Header,
 
-    #[size(deduced)]
+    #[size(plain)]
     field: &'a str,
+
     // Declare an extension block. Precise how to encode the presence/non presence
     // of at least one extension inside.
-    // #[option(header = 0b1000_0000)]
-    // _begin: marker::ExtBlockBegin,
-    // // Extensions in an ExtBlock should always be an option. Failing to do so will result in
-    // // a compile error.
-    // pub ext1: Option<ZExt1<'a>>,
-    // pub ext2: Option<ZExt2>,
-    // // You should always mark the end of an ext block.
-    // _end: marker::ExtBlockEnd,
+    #[option(header = 0b1000_0000)]
+    _begin: marker::ExtBlockBegin,
+
+    // Extensions in an ExtBlock should always be an option. Failing to do so will result in
+    // a compile error.
+    pub ext1: Option<ZExt1<'a>>,
+    pub ext2: Option<ZExt2>,
+
+    // You should always mark the end of an ext block.
+    _end: marker::ExtBlockEnd,
 }
 
 zextattribute!(impl<'a> ZExt1<'a>, Msg1<'a>, 0x1, true);

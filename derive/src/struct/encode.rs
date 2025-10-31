@@ -15,6 +15,38 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
             ZFieldKind::Flag => {
                 enc.push(flag.clone());
             }
+            ZFieldKind::Header => {}
+            ZFieldKind::ZExtBlock { flavour, exts } => {
+                if matches!(flavour, ZPresenceFlavour::Plain) {
+                    enc.push(quote::quote! {
+                        let mut n_exts = 0usize;
+                    });
+
+                    for ext in exts {
+                        let access = &ext.access;
+                        enc.push(quote::quote! {
+                            if self.#access.is_some() {
+                                n_exts += 1;
+                            }
+                        });
+                    }
+
+                    enc.push(quote::quote! {
+                        <u8 as zenoh_codec::ZStruct>::z_encode(&((n_exts != 0) as u8), w)?;
+                    });
+                }
+
+                for ext in exts {
+                    let access = &ext.access;
+                    enc.push(quote::quote! {
+                        if let Some(ext) = &self.#access {
+                            n_exts -= 1;
+                            < _ as zenoh_codec::ZExtAttribute<Self>>::z_encode(ext, w, n_exts != 0)?;
+                        }
+                    });
+                }
+            }
+            ZFieldKind::ZExtBlockEnd => {}
             ZFieldKind::ZStruct(ZStructKind { flavour: attr, ty }) => {
                 let (presence, size) = match attr {
                     ZStructFlavour::Option { presence, size } => (
@@ -52,7 +84,6 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
                     < #ty as zenoh_codec::ZStruct>::z_encode(&self.#access, w)?;
                 });
             }
-            _ => {}
         }
     }
 

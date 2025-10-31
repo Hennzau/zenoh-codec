@@ -35,9 +35,19 @@ pub(crate) struct ZStructKind {
     pub ty: TokenStream,
 }
 
+pub(crate) struct ZExtKind {
+    pub ty: TokenStream,
+    pub access: TokenStream,
+}
+
 pub(crate) enum ZFieldKind {
     Header,
     Flag,
+    ZExtBlock {
+        flavour: ZPresenceFlavour,
+        exts: Vec<ZExtKind>,
+    },
+    ZExtBlockEnd,
     ZStruct(ZStructKind),
 }
 
@@ -205,6 +215,32 @@ impl ZField {
                     kind: ZFieldKind::Header,
                     access,
                 };
+            } else if path.ident == "ExtBlockBegin" {
+                let attr = attrs
+                    .iter()
+                    .find(|a| a.path().is_ident("option"))
+                    .expect("ZExtBlockBegin must have option attribute");
+
+                let mut presence = Option::<ZPresenceFlavour>::None;
+                attr.parse_nested_meta(|meta| {
+                    ZPresenceFlavour::from_meta(&meta, &mut presence)
+                        .expect("Failed to parse presence flavour");
+                    Ok(())
+                })
+                .expect("Failed to parse ZExtBlockBegin attribute");
+
+                return ZField {
+                    kind: ZFieldKind::ZExtBlock {
+                        flavour: presence.expect("ZExtBlockBegin must have a presence flavour"),
+                        exts: Vec::new(),
+                    },
+                    access,
+                };
+            } else if path.ident == "ExtBlockEnd" {
+                return ZField {
+                    kind: ZFieldKind::ZExtBlockEnd,
+                    access,
+                };
             }
         }
 
@@ -254,6 +290,8 @@ impl ZStruct {
         let mut header = false;
         let mut total_flag_bits = 0u8;
 
+        let mut ext_block = false;
+
         for field in fields {
             if is_deduced {
                 panic!("Deduced size flavour must appear once at the end of the struct");
@@ -279,36 +317,68 @@ impl ZStruct {
                     }
                     flag = true;
                 }
-                ZFieldKind::ZStruct(ZStructKind { flavour: attr, .. }) => {
-                    if let ZStructFlavour::Option {
-                        presence: ZPresenceFlavour::Flag,
-                        ..
-                    } = attr
-                    {
-                        if !flag {
-                            panic!("Flag field must be defined before using flag presence flavour");
+                ZFieldKind::ZExtBlock { .. } => {
+                    if ext_block {
+                        panic!("Nested ZExtBlockBegin is not supported");
+                    }
+                    ext_block = true;
+                }
+                ZFieldKind::ZExtBlockEnd => {
+                    if !ext_block {
+                        panic!("ZExtBlockEnd found without a matching ZExtBlockBegin");
+                    }
+                    ext_block = false;
+                }
+                ZFieldKind::ZStruct(ZStructKind { flavour, ty }) => {
+                    if ext_block {
+                        if !matches!(flavour, ZStructFlavour::Size(ZSizeFlavour::None)) {
+                            panic!("Fields inside ZExtBlock must have no size or option flavour");
                         }
 
-                        total_flag_bits += 1;
-                    }
+                        let kind = &mut parsed_fields.last_mut().unwrap().kind;
+                        match kind {
+                            ZFieldKind::ZExtBlock { exts, .. } => {
+                                let ty = ty.clone();
+                                let access = zfield.access.clone();
+                                exts.push(ZExtKind { ty, access });
+                            }
+                            _ => panic!("Expected ZExtBlock kind"),
+                        }
 
-                    match attr {
-                        ZStructFlavour::Size(flavour)
-                        | ZStructFlavour::Option { size: flavour, .. } => match flavour {
-                            ZSizeFlavour::Deduced => {
-                                is_deduced = true;
+                        continue;
+                    } else {
+                        if let ZStructFlavour::Option {
+                            presence: ZPresenceFlavour::Flag,
+                            ..
+                        } = flavour
+                        {
+                            if !flag {
+                                panic!(
+                                    "Flag field must be defined before using flag presence flavour"
+                                );
                             }
-                            ZSizeFlavour::NonEmptyFlag(size)
-                            | ZSizeFlavour::MaybeEmptyFlag(size) => {
-                                if !flag {
-                                    panic!(
-                                        "Flag field must be defined before using flag size flavours"
-                                    );
+
+                            total_flag_bits += 1;
+                        }
+
+                        match flavour {
+                            ZStructFlavour::Size(flavour)
+                            | ZStructFlavour::Option { size: flavour, .. } => match flavour {
+                                ZSizeFlavour::Deduced => {
+                                    is_deduced = true;
                                 }
-                                total_flag_bits += *size;
-                            }
-                            _ => {}
-                        },
+                                ZSizeFlavour::NonEmptyFlag(size)
+                                | ZSizeFlavour::MaybeEmptyFlag(size) => {
+                                    if !flag {
+                                        panic!(
+                                            "Flag field must be defined before using flag size flavours"
+                                        );
+                                    }
+                                    total_flag_bits += *size;
+                                }
+                                _ => {}
+                            },
+                        }
                     }
                 }
             }

@@ -14,35 +14,70 @@ pub fn parse_body(r#struct: &ZStruct) -> (TokenStream, TokenStream) {
         let kind = &field.kind;
 
         match kind {
+            ZFieldKind::Flag => {}
             ZFieldKind::Header => {
                 header = true;
             }
-            ZFieldKind::ZStruct(ZStructKind {
-                flavour: ZStructFlavour::Option { presence, .. },
-                ..
-            }) => match presence {
-                ZPresenceFlavour::Header(expr) => {
-                    if !header {
-                        panic!(
-                            "Header field must be defined before any field using header presence."
-                        );
-                    }
+            ZFieldKind::ZExtBlock {
+                flavour: ZPresenceFlavour::Header(expr),
+                exts,
+            } => {
+                if !header {
+                    panic!("Header field must be defined before any field using header presence.");
+                }
 
-                    let paccess = Ident::new(&format!("presence_{}", access), Span::call_site());
+                enc.push(quote::quote! {
+                    let mut n_exts = 0usize;
+                });
 
+                for ext in exts {
+                    let access = &ext.access;
                     enc.push(quote::quote! {
                         if self.#access.is_some() {
-                            header |= #expr;
+                            n_exts += 1;
                         }
                     });
-
-                    dec.push(quote::quote! {
-                        let #paccess: bool = (header & #expr) != 0;
-                    });
                 }
-                _ => continue,
-            },
-            _ => {}
+
+                enc.push(quote::quote! {
+                    if n_exts > 0 {
+                        header |= #expr;
+                    }
+                });
+
+                let paccess = Ident::new(&format!("presence_{}", access), Span::call_site());
+
+                dec.push(quote::quote! {
+                    let #paccess = (header & #expr) != 0;
+                });
+            }
+            ZFieldKind::ZExtBlock { .. } => {}
+            ZFieldKind::ZExtBlockEnd => {}
+            ZFieldKind::ZStruct(ZStructKind {
+                flavour:
+                    ZStructFlavour::Option {
+                        presence: ZPresenceFlavour::Header(expr),
+                        ..
+                    },
+                ..
+            }) => {
+                if !header {
+                    panic!("Header field must be defined before any field using header presence.");
+                }
+
+                let paccess = Ident::new(&format!("presence_{}", access), Span::call_site());
+
+                enc.push(quote::quote! {
+                    if self.#access.is_some() {
+                        header |= #expr;
+                    }
+                });
+
+                dec.push(quote::quote! {
+                    let #paccess: bool = (header & #expr) != 0;
+                });
+            }
+            ZFieldKind::ZStruct(_) => {}
         }
     }
 

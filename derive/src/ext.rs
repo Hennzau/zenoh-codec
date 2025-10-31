@@ -76,7 +76,10 @@ fn infer_kind(ext: &ZStruct) -> TokenStream {
         let kind = &ext.0.first().unwrap().kind;
 
         match kind {
-            ZFieldKind::Flag | ZFieldKind::Header => {
+            ZFieldKind::Flag
+            | ZFieldKind::Header
+            | ZFieldKind::ZExtBlockEnd
+            | ZFieldKind::ZExtBlock { .. } => {
                 panic!("ZExt cannot infer kind from one marker field.")
             }
             ZFieldKind::ZStruct(ZStructKind { ty, .. }) => {
