@@ -48,7 +48,7 @@ struct ZStruct2<'a> {
     pub sn: u32,
     pub qos: u8,
 
-    // Declare a 8-bit flag to store presence/size bits. Available sizes are u8, u16, u32, u64. (Internally for > u8, it will encode it as VLE)
+    // Declare a 8-bit flag to store presence/size bits.
     _flag: marker::Flag,
 
     // optional presence stored as 1 bit in the flag
