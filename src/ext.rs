@@ -64,7 +64,6 @@ pub trait ZExt: ZStruct {
 const FLAG_MANDATORY: u8 = 1 << 4;
 const FLAG_MORE: u8 = 1 << 7;
 
-/// Declare an extension as an attribute for <T>.
 pub trait ZExtAttribute<T>: ZExt + ZStruct {
     const ID: u8;
     const MANDATORY: bool;

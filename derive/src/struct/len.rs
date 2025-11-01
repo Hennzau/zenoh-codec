@@ -14,7 +14,7 @@ pub fn parse_body(r#struct: &ZStruct) -> TokenStream {
         match kind {
             ZFieldKind::Flag | ZFieldKind::Header => {
                 len_parts.push(quote::quote! {
-                    1usize // 1 byte!
+                    1usize
                 });
             }
             ZFieldKind::ZExtBlock { flavour, exts } => {

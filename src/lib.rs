@@ -1,30 +1,3 @@
-//! A no_std, no alloc codec library for Zenoh protocol.
-//!
-//! With this library, you can encode/decode structs according to the Zenoh protocol specification.
-//! Your structs should only have those base types:
-//! - u8, u16, u32, u64, usize
-//! - [u8; N] for fixed-size arrays
-//! - &'a [u8], &'a str for variable-size byte buffers and strings
-//! - all types deriving the trait from this library.
-//!
-//! By doing a zero-copy approach, you're limited to no lifetime or one single <'a> lifetime for all fields.
-//!
-//! You can choose how the size of each field is encoded by using size flavours:
-//! - (flag = <no.bits>) will write the size of the field in a flag with the given number of bits. It will assume that the field cannot be empty to optimize the size.
-//! - (eflag = <no.bits>) will write the size of the field in a flag with the given number of bits. It will assume that the field can be empty.
-//!   *Note*: this can be used multiple times and it will pack the sizes together in the same 1byte flag.
-//!
-//! - (plain) will write the size of the field as a plain usize before the actual field.
-//! - (deduced) will deduce the size of the field from the remaining size of the struct. This can only be used once and only at the end of the struct.
-//!   **WARNING**: using this flavour will expect the upper layer to decode/encode the length of the struct itself and pass a reader with the correct length (using **.sub(len)**). Failing to do so will result in errors or incorrect data
-//!
-//! When T is encodable/decodable, you can also encode/decode Option<T>, you should then precise the option flavour:
-//! - (flag, size(<see above>))
-//! - (plain, size(<see above>))
-//!
-//! Choosing **flag** will write 1 bit in the struct flags to indicate if the Option is Some or None.
-//! Choosing **plain** will write 1 byte before the field to indicate if the Option is Some or None. Be careful
-//!
 #![no_std]
 
 pub use zenoh_codec_derive::*;
@@ -66,7 +39,6 @@ pub trait ZReaderExt<'a> {
         self.remaining().gt(&0)
     }
 
-    /// Peeks a u8 value without advancing the reader.
     fn get_u8(&self) -> ZResult<u8>;
 
     fn read(&mut self, len: usize) -> ZResult<&'a [u8]>;
