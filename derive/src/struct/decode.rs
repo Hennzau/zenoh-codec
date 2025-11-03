@@ -2,7 +2,8 @@ use proc_macro2::{Span, TokenStream};
 use syn::Ident;
 
 use crate::r#struct::parse::{
-    ZFieldKind, ZPresenceFlavour, ZSizeFlavour, ZStruct, ZStructFlavour, ZStructKind,
+    ZFieldKind, ZHStorageFlavour, ZPresenceFlavour, ZSizeFlavour, ZStruct, ZStructFlavour,
+    ZStructKind,
 };
 
 pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
@@ -29,6 +30,15 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
                     let #access = zenoh_codec::marker::Header;
                 });
             }
+            ZFieldKind::HeaderStorage {
+                ty,
+                flavour: ZHStorageFlavour::Value(_),
+            } => {
+                dec.push(quote::quote! {
+                    let #access: #ty = #ty;
+                });
+            }
+            ZFieldKind::HeaderStorage { .. } => {}
             ZFieldKind::ZExtBlock { flavour, exts } => {
                 dec.push(quote::quote! {
                     let #access = zenoh_codec::marker::ExtBlockBegin;

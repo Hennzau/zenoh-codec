@@ -21,6 +21,7 @@ pub fn parse_body(r#struct: &ZStruct) -> (TokenStream, TokenStream) {
             ZFieldKind::Flag => {
                 flag = true;
             }
+            ZFieldKind::HeaderStorage { .. } => {}
             ZFieldKind::ZExtBlock { flavour, exts } => {
                 if matches!(*flavour, ZPresenceFlavour::Flag) {
                     if !flag {

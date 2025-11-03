@@ -151,6 +151,15 @@ struct ZComplex<'a> {
 struct ZHeader<'a> {
     _header: marker::Header,
 
+    #[hstore(value = 0b1010_0000)]
+    _id: marker::Phantom,
+
+    #[hstore(mask = 0b0001_1100, shift = 2)]
+    pub vu8: u8,
+
+    #[hstore(mask = 0b0000_0011, shift = 0)]
+    pub vu8_2: u8,
+
     #[option(header = 0b1000_0000, size(plain))]
     pub keyexpr: Option<&'a str>,
 
@@ -332,6 +341,9 @@ fn test_zheader() {
     };
     let header = ZHeader {
         _header: marker::Header,
+        _id: marker::Phantom,
+        vu8: 0b0000_0101,
+        vu8_2: 0b0000_0011,
         keyexpr: Some("key.expr"),
         field1: deep::Inner { seq: 7, data: &buf },
         field2: Some(s),

@@ -18,6 +18,7 @@ There are two kinds of structs you can declare:
 * `Option<T>` implements `ZStruct` if `T` does.
 * Nested options are **not supported**.
 * Each field can specify how to encode/decode its **size** and/or **presence** (for `Option<T>`) using attributes.
+* Additionally, you can use the special **hstore** attribute on `T: Into<u8> + From<u8>` and `marker::Phantom` to indicate that the field should be encoded/decoded directly in the header field if present.
 
 If no size attribute is specified, the default size flavor is `none`, meaning the field is encoded without any size information, and decoding must not rely on it.
 
@@ -35,10 +36,19 @@ If no size attribute is specified, the default size flavor is `none`, meaning th
 * `flag`: presence is stored as one bit within a flag field.
 * `header = MASK`: presence is stored in a header field using the provided bitmask.
 
+### Supported hstore flavors
+
+* `value = VALUE`: the field has no data in it but being present in the struct adds the specified `VALUE` (`u8`) to the header field during encoding.
+* `mask = MASK, shift = SHIFT`: the field belongs to the struct but when encoding/decoding, its value is stored in the header field using the provided `MASK` (`u8`) and `SHIFT` (`u8`).
+
 #### Flag and header fields
 
 * A **flag field** is a `marker::Flag` (`u8`) declared before any field using it. Each flagged field consumes bits from left to right.
 * A **header field** is a `marker::Header` (`u8`) declared at the start of the struct. Each field using it applies its bitmask to determine presence.
+
+#### Phantom fields
+
+* A **phantom field** is a `marker::Phantom` that must use `attributes` to specify its behavior. It does not occupy space in the struct.
 
 #### Extension blocks
 

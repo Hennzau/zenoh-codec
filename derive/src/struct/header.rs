@@ -1,7 +1,9 @@
 use proc_macro2::{Span, TokenStream};
 use syn::Ident;
 
-use crate::r#struct::parse::{ZFieldKind, ZPresenceFlavour, ZStruct, ZStructFlavour, ZStructKind};
+use crate::r#struct::parse::{
+    ZFieldKind, ZHStorageFlavour, ZPresenceFlavour, ZStruct, ZStructFlavour, ZStructKind,
+};
 
 pub fn parse_body(r#struct: &ZStruct) -> (TokenStream, TokenStream) {
     let mut enc = Vec::new();
@@ -17,6 +19,28 @@ pub fn parse_body(r#struct: &ZStruct) -> (TokenStream, TokenStream) {
             ZFieldKind::Flag => {}
             ZFieldKind::Header => {
                 header = true;
+            }
+            ZFieldKind::HeaderStorage { ty, flavour } => {
+                if !header {
+                    panic!("Header field must be defined before any HeaderStorage field.");
+                }
+
+                match flavour {
+                    ZHStorageFlavour::Value(expr) => {
+                        enc.push(quote::quote! {
+                            header |= #expr;
+                        });
+                    }
+                    ZHStorageFlavour::U8 { mask, shift } => {
+                        enc.push(quote::quote! {
+                            header |= (< #ty as Into<u8> >::into(self.#access) << #shift) & #mask;
+                        });
+
+                        dec.push(quote::quote! {
+                            let #access: #ty = < #ty as From<u8> >::from( (header & #mask) >> #shift);
+                        });
+                    }
+                }
             }
             ZFieldKind::ZExtBlock {
                 flavour: ZPresenceFlavour::Header(expr),

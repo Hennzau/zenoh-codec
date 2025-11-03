@@ -83,6 +83,65 @@ struct ZStruct3<'a> {
     pub field2: Option<ZStruct2<'a>>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InterestMode {
+    Final,
+    Current,
+    Future,
+    CurrentFuture,
+}
+
+impl From<u8> for InterestMode {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => InterestMode::Final,
+            1 => InterestMode::Current,
+            2 => InterestMode::Future,
+            3 => InterestMode::CurrentFuture,
+            _ => InterestMode::Final,
+        }
+    }
+}
+
+impl From<InterestMode> for u8 {
+    fn from(value: InterestMode) -> Self {
+        match value {
+            InterestMode::Final => 0,
+            InterestMode::Current => 1,
+            InterestMode::Future => 2,
+            InterestMode::CurrentFuture => 3,
+        }
+    }
+}
+
+#[derive(ZStruct, PartialEq, Debug)]
+struct ZStruct4<'a> {
+    _header: marker::Header,
+
+    // A Phantom field that must use attribute to be encoded/decoded. Here we use the only one available for now: the
+    // hstore(value/(mask & shift)) flavour. The `hstore(value)` flavour will always store the given const value into
+    // the header when encoding, it will not try to read it so if you need to access it you will need to do it in
+    // the upper layer or use the other `hstore(mask & shift)` flavour (see below).
+    #[hstore(value = 0b1111_0000)]
+    _id: marker::Phantom,
+
+    // A u8 header storage using mask and shift to store/retrieve the value. The field type must implement From<u8> and Into<u8>
+    // in order to be encoded/decoded properly.
+    //
+    // In this example we expect the InterestMode to be encoded into bits 2 and 3 of the header byte. But the Into<u8>
+    // implementation will convert the InterestMode into values between 0 and 3 so we need to shift those bits by 2 to store them
+    // into the correct position.
+    #[hstore(mask = 0b0000_1100, shift = 2)]
+    pub myhvalue: InterestMode,
+
+    // Another u8 header storage example
+    #[hstore(mask = 0b0000_0011, shift = 0)]
+    pub myhvalue2: u8,
+
+    #[size(deduced)]
+    pub field1: inner::ZStruct1<'a>,
+}
+
 fn main() {
     let struct1 = ZStruct1 {
         sn: 42,
@@ -156,4 +215,33 @@ fn main() {
     let mut reader = data.as_slice();
     let decoded_struct3 = <ZStruct3 as ZStruct>::z_decode(&mut reader.sub(len).unwrap()).unwrap();
     assert_eq!(struct3, decoded_struct3);
+
+    let struct4 = ZStruct4 {
+        _header: marker::Header,
+        _id: marker::Phantom,
+        myhvalue: InterestMode::Future,
+        myhvalue2: 0b0000_0010,
+        field1: ZStruct1 {
+            sn: 46,
+            qos: 2,
+            array: [20, 21, 22],
+            opt: None,
+            opt2: Some("zenoh"),
+            keyexpr: "key4==value4",
+        },
+    };
+
+    let mut data = [0u8; 256];
+    let mut writer = &mut data.as_mut_slice();
+
+    let len = <ZStruct4 as ZStruct>::z_len(&struct4);
+    <ZStruct4 as ZStruct>::z_encode(&struct4, &mut writer).unwrap();
+
+    let mut reader = data.as_slice();
+    let decoded_struct4 = <ZStruct4 as ZStruct>::z_decode(&mut reader.sub(len).unwrap()).unwrap();
+    assert_eq!(struct4, decoded_struct4);
+
+    let mut hreader = data.as_slice();
+    let header = <u8 as ZStruct>::z_decode(&mut hreader).unwrap();
+    assert_eq!(header & 0b1111_0000, 0b1111_0000);
 }

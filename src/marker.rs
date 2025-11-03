@@ -5,6 +5,9 @@ pub struct Flag;
 pub struct Header;
 
 #[derive(Debug, PartialEq)]
+pub struct Phantom;
+
+#[derive(Debug, PartialEq)]
 pub struct ExtBlockBegin;
 
 #[derive(Debug, PartialEq)]

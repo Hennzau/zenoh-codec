@@ -30,6 +30,11 @@ pub(crate) enum ZStructFlavour {
     Size(ZSizeFlavour),
 }
 
+pub(crate) enum ZHStorageFlavour {
+    Value(Expr),
+    U8 { mask: Expr, shift: Expr },
+}
+
 pub(crate) struct ZStructKind {
     pub flavour: ZStructFlavour,
     pub ty: TokenStream,
@@ -43,6 +48,12 @@ pub(crate) struct ZExtKind {
 pub(crate) enum ZFieldKind {
     Header,
     Flag,
+
+    HeaderStorage {
+        flavour: ZHStorageFlavour,
+        ty: TokenStream,
+    },
+
     ZExtBlock {
         flavour: ZPresenceFlavour,
         exts: Vec<ZExtKind>,
@@ -142,6 +153,47 @@ impl ZStructFlavour {
         }
 
         struct_attr.expect("Struct expected to have either option or size attribute")
+    }
+}
+
+impl ZHStorageFlavour {
+    fn from_attr(attr: &Attribute) -> ZHStorageFlavour {
+        if attr.path().is_ident("hstore") {
+            let mut value_expr = Option::<Expr>::None;
+            let mut mask_expr = Option::<Expr>::None;
+            let mut shift_expr = Option::<Expr>::None;
+
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("value") {
+                    let value = meta.value().expect("Expected value for hstore value");
+                    let expr: Expr = value.parse()?;
+                    value_expr.replace(expr);
+                } else if meta.path.is_ident("mask") {
+                    let value = meta.value().expect("Expected value for hstore mask");
+                    let expr: Expr = value.parse()?;
+                    mask_expr.replace(expr);
+                } else if meta.path.is_ident("shift") {
+                    let value = meta.value().expect("Expected value for hstore shift");
+                    let expr: Expr = value.parse()?;
+                    shift_expr.replace(expr);
+                }
+
+                Ok(())
+            })
+            .expect("Failed to parse HeaderStorage attribute");
+
+            if let Some(expr) = value_expr {
+                ZHStorageFlavour::Value(expr)
+            } else if let (Some(mask), Some(shift)) = (mask_expr, shift_expr) {
+                ZHStorageFlavour::U8 { mask, shift }
+            } else {
+                panic!(
+                    "HeaderStorage must have either a value expression or both mask and shift expressions"
+                );
+            }
+        } else {
+            panic!("Expected hstore attribute for HeaderStorage field");
+        }
     }
 }
 
@@ -277,12 +329,6 @@ impl ZField {
             }
         }
 
-        let attr = attrs
-            .iter()
-            .find(|a| a.path().is_ident("option") || a.path().is_ident("size"))
-            .map(ZStructFlavour::from_attr)
-            .unwrap_or(ZStructFlavour::Size(ZSizeFlavour::None));
-
         let ty = match ty {
             Type::Array(ty) => {
                 let len = &ty.len;
@@ -307,6 +353,20 @@ impl ZField {
             }
             _ => panic!("Unsupported field type in ZStruct"),
         };
+
+        if let Some(attr) = attrs.iter().find(|a| a.path().is_ident("hstore")) {
+            let flavour = ZHStorageFlavour::from_attr(attr);
+            return ZField {
+                kind: ZFieldKind::HeaderStorage { flavour, ty },
+                access,
+            };
+        }
+
+        let attr = attrs
+            .iter()
+            .find(|a| a.path().is_ident("option") || a.path().is_ident("size"))
+            .map(ZStructFlavour::from_attr)
+            .unwrap_or(ZStructFlavour::Size(ZSizeFlavour::None));
 
         ZField {
             kind: ZFieldKind::ZStruct(ZStructKind { flavour: attr, ty }),
@@ -343,6 +403,11 @@ impl ZStruct {
                     }
 
                     header = true;
+                }
+                ZFieldKind::HeaderStorage { .. } => {
+                    if !header {
+                        panic!("HStorage field must be defined after the header field");
+                    }
                 }
                 ZFieldKind::Flag => {
                     if flag {

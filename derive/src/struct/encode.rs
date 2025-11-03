@@ -16,6 +16,7 @@ pub fn parse_body(r#struct: &ZStruct, flag: TokenStream) -> TokenStream {
                 enc.push(flag.clone());
             }
             ZFieldKind::Header => {}
+            ZFieldKind::HeaderStorage { .. } => {}
             ZFieldKind::ZExtBlock { flavour, exts } => {
                 if matches!(flavour, ZPresenceFlavour::Plain) {
                     enc.push(quote::quote! {

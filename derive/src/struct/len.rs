@@ -17,6 +17,7 @@ pub fn parse_body(r#struct: &ZStruct) -> TokenStream {
                     1usize
                 });
             }
+            ZFieldKind::HeaderStorage { .. } => {}
             ZFieldKind::ZExtBlock { flavour, exts } => {
                 if matches!(*flavour, ZPresenceFlavour::Plain) {
                     len_parts.push(quote::quote! { 1usize });

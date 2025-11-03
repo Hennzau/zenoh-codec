@@ -78,6 +78,7 @@ fn infer_kind(ext: &ZStruct) -> TokenStream {
         match kind {
             ZFieldKind::Flag
             | ZFieldKind::Header
+            | ZFieldKind::HeaderStorage { .. }
             | ZFieldKind::ZExtBlockEnd
             | ZFieldKind::ZExtBlock { .. } => {
                 panic!("ZExt cannot infer kind from one marker field.")
