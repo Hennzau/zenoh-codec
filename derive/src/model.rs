@@ -1,7 +1,10 @@
 use proc_macro2::TokenStream;
 use syn::{Generics, Ident, LitStr};
 
-use crate::model::{attribute::ZenohAttribute, ty::ZenohType};
+use crate::model::{
+    attribute::{ExtAttribute, ZenohAttribute},
+    ty::ZenohType,
+};
 
 pub mod attribute;
 pub mod ty;
@@ -21,7 +24,7 @@ impl ZenohField {
             .as_ref()
             .ok_or_else(|| syn::Error::new_spanned(field, "Expected named field"))?;
 
-        let access = quote::quote! { self.#ident };
+        let access = quote::quote! { #ident };
 
         let ty = ZenohType::from_type(&field.ty)?;
         ty.check_attribute(&attr)?;
@@ -44,11 +47,7 @@ pub struct ZenohStruct {
 impl ZenohStruct {
     pub fn from_derive_input(input: &syn::DeriveInput) -> syn::Result<Self> {
         let fields = match &input.data {
-            syn::Data::Struct(data_struct) => data_struct
-                .fields
-                .iter()
-                .map(ZenohField::from_field)
-                .collect::<syn::Result<Vec<ZenohField>>>()?,
+            syn::Data::Struct(data_struct) => &data_struct.fields,
             _ => {
                 return Err(syn::Error::new_spanned(
                     input,
@@ -56,6 +55,28 @@ impl ZenohStruct {
                 ));
             }
         };
+
+        let mut fields_vec = Vec::new();
+        let mut found_ext_block = false;
+        let mut in_ext_block = false;
+        for field in fields {
+            let field = ZenohField::from_field(field)?;
+            let is_ext = !matches!(field.attr.ext, ExtAttribute::None);
+            if is_ext {
+                if !found_ext_block {
+                    found_ext_block = true;
+                    in_ext_block = true;
+                } else if !in_ext_block {
+                    return Err(syn::Error::new_spanned(
+                        field.access.clone(),
+                        "Fields with 'ext' attribute must be grouped in a single contiguous block",
+                    ));
+                }
+            } else {
+                in_ext_block = false;
+            }
+            fields_vec.push(field);
+        }
 
         let mut header = Option::<HeaderDeclaration>::None;
 
@@ -77,7 +98,7 @@ impl ZenohStruct {
             ident: input.ident.clone(),
             generics: input.generics.clone(),
             header,
-            fields,
+            fields: fields_vec,
         })
     }
 }

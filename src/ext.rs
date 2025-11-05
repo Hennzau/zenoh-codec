@@ -1,7 +1,6 @@
-use crate::{ZCodecError, ZReader, ZReaderExt, ZResult, ZStruct, ZWriter};
+use crate::{ZCodecError, ZReader, ZReaderExt, ZResult, ZStructDecode, ZStructEncode, ZWriter};
 
 const KIND_MASK: u8 = 0b0110_0000;
-const ID_MASK: u8 = 0b0000_1111;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -30,75 +29,63 @@ impl TryFrom<u8> for ZExtKind {
     }
 }
 
-pub trait ZExt: ZStruct {
+pub trait ZExt<'a>: ZStructEncode + ZStructDecode<'a> {
     const KIND: ZExtKind;
-
-    fn z_len(&self) -> usize {
-        match Self::KIND {
-            ZExtKind::Unit | ZExtKind::U64 => <Self as ZStruct>::z_len(self),
-            ZExtKind::ZStruct => {
-                <usize as ZStruct>::z_len(&<Self as ZStruct>::z_len(self))
-                    + <Self as ZStruct>::z_len(self)
-            }
-        }
-    }
-
-    fn z_encode(&self, w: &mut ZWriter) -> ZResult<()> {
-        if Self::KIND == ZExtKind::ZStruct {
-            <usize as ZStruct>::z_encode(&<Self as ZStruct>::z_len(self), w)?;
-        }
-
-        <Self as ZStruct>::z_encode(self, w)
-    }
-
-    fn z_decode<'a>(r: &mut ZReader<'a>) -> ZResult<Self::ZType<'a>> {
-        if Self::KIND == ZExtKind::ZStruct {
-            let len = <usize as ZStruct>::z_decode(r)?;
-            <Self as ZStruct>::z_decode(&mut <ZReader as ZReaderExt>::sub(r, len)?)
-        } else {
-            <Self as ZStruct>::z_decode(r)
-        }
-    }
 }
 
 const FLAG_MANDATORY: u8 = 1 << 4;
 const FLAG_MORE: u8 = 1 << 7;
+const ID_MASK: u8 = 0b0000_1111;
 
-pub trait ZExtAttribute<T>: ZExt + ZStruct {
-    const ID: u8;
-    const MANDATORY: bool;
+pub fn zext_len<'a, T: ZExt<'a>>(x: &T) -> usize {
+    1 + match T::KIND {
+        ZExtKind::Unit | ZExtKind::U64 => <T as ZStructEncode>::z_len(x),
+        ZExtKind::ZStruct => {
+            <usize as ZStructEncode>::z_len(&<T as ZStructEncode>::z_len(x))
+                + <T as ZStructEncode>::z_len(x)
+        }
+    }
+}
 
-    const HEADER: u8 =
-        (Self::ID | Self::KIND as u8) | if Self::MANDATORY { FLAG_MANDATORY } else { 0 };
+pub fn zext_encode<'a, T: ZExt<'a>, const ID: u8, const MANDATORY: bool>(
+    x: &T,
+    w: &mut ZWriter,
+    more: bool,
+) -> ZResult<()> {
+    let header: u8 = (ID | T::KIND as u8)
+        | if MANDATORY { FLAG_MANDATORY } else { 0 }
+        | if more { FLAG_MORE } else { 0 };
 
-    fn z_len(&self) -> usize {
-        1 + <Self as ZExt>::z_len(self)
+    <u8 as ZStructEncode>::z_encode(&header, w)?;
+
+    if T::KIND == ZExtKind::ZStruct {
+        <usize as ZStructEncode>::z_encode(&<T as ZStructEncode>::z_len(x), w)?;
     }
 
-    fn z_encode(&self, w: &mut ZWriter, more: bool) -> ZResult<()> {
-        let header = Self::HEADER | if more { FLAG_MORE } else { 0 };
+    <T as ZStructEncode>::z_encode(x, w)
+}
 
-        <u8 as ZStruct>::z_encode(&header, w)?;
-        <Self as ZExt>::z_encode(self, w)
-    }
+pub fn zext_decode<'a, T: ZExt<'a>>(r: &mut ZReader<'a>) -> ZResult<T> {
+    let _ = <u8 as ZStructDecode>::z_decode(r)?;
 
-    fn z_decode<'a>(r: &mut ZReader<'a>) -> ZResult<Self::ZType<'a>> {
-        let _ = <u8 as ZStruct>::z_decode(r)?;
-
-        <Self as ZExt>::z_decode(r)
+    if T::KIND == ZExtKind::ZStruct {
+        let len = <usize as ZStructDecode>::z_decode(r)?;
+        <T as ZStructDecode>::z_decode(&mut <ZReader as ZReaderExt>::sub(r, len)?)
+    } else {
+        <T as ZStructDecode>::z_decode(r)
     }
 }
 
 pub fn skip_ext(r: &mut ZReader, kind: ZExtKind) -> ZResult<()> {
-    let _ = <u8 as ZStruct>::z_decode(r)?;
+    let _ = <u8 as ZStructDecode>::z_decode(r)?;
 
     match kind {
         ZExtKind::Unit => {}
         ZExtKind::U64 => {
-            let _ = <u64 as ZStruct>::z_decode(r)?;
+            let _ = <u64 as ZStructDecode>::z_decode(r)?;
         }
         ZExtKind::ZStruct => {
-            let len = <usize as ZStruct>::z_decode(r)?;
+            let len = <usize as ZStructDecode>::z_decode(r)?;
             let _ = <ZReader as ZReaderExt>::sub(r, len)?;
         }
     }
@@ -107,7 +94,7 @@ pub fn skip_ext(r: &mut ZReader, kind: ZExtKind) -> ZResult<()> {
 }
 
 pub fn decode_ext_header(r: &mut ZReader) -> ZResult<(u8, ZExtKind, bool, bool)> {
-    let header = r.get_u8()?;
+    let header = r.peek_u8()?;
 
     let id = header & ID_MASK;
     let kind = ZExtKind::try_from(header & KIND_MASK)?;
@@ -115,21 +102,4 @@ pub fn decode_ext_header(r: &mut ZReader) -> ZResult<(u8, ZExtKind, bool, bool)>
     let more = (header & FLAG_MORE) != 0;
 
     Ok((id, kind, mandatory, more))
-}
-
-#[macro_export]
-macro_rules! zextattribute {
-    (impl<'a> $ext:ty, $t:ty, $id:expr, $m:expr) => {
-        impl<'a> zenoh_codec::ZExtAttribute<$t> for $ext {
-            const ID: u8 = $id;
-            const MANDATORY: bool = $m;
-        }
-    };
-
-    ($ext:ty, $t:ty, $id:expr, $m:expr) => {
-        impl zenoh_codec::ZExtAttribute<$t> for $ext {
-            const ID: u8 = $id;
-            const MANDATORY: bool = $m;
-        }
-    };
 }

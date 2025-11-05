@@ -1,11 +1,12 @@
 use proc_macro2::Span;
-use syn::{Expr, Ident, LitStr, meta::ParseNestedMeta, parenthesized, spanned::Spanned};
+use syn::{Expr, ExprPath, meta::ParseNestedMeta, parenthesized, spanned::Spanned};
 
 #[derive(Clone)]
 pub struct ZenohAttribute {
     pub span: Span,
 
     pub size: SizeAttribute,
+    pub emptyness: EmptynessAttribute,
     pub presence: PresenceAttribute,
     pub header: HeaderAttribute,
     pub ext: ExtAttribute,
@@ -17,6 +18,7 @@ impl Default for ZenohAttribute {
         ZenohAttribute {
             span: Span::call_site(),
             size: SizeAttribute::default(),
+            emptyness: EmptynessAttribute::default(),
             presence: PresenceAttribute::default(),
             header: HeaderAttribute::default(),
             ext: ExtAttribute::default(),
@@ -34,6 +36,7 @@ impl ZenohAttribute {
             if attr.path().is_ident("zenoh") {
                 attr.parse_nested_meta(|meta| {
                     let size = SizeAttribute::from_meta(&meta)?;
+                    let emptyness = EmptynessAttribute::from_meta(&meta)?;
                     let presence = PresenceAttribute::from_meta(&meta)?;
                     let header = HeaderAttribute::from_meta(&meta)?;
                     let default = DefaultAttribute::from_meta(&meta)?;
@@ -41,6 +44,9 @@ impl ZenohAttribute {
 
                     if !matches!(size, SizeAttribute::None) {
                         zattr.size = size;
+                    }
+                    if !matches!(emptyness, EmptynessAttribute::NotEmpty) {
+                        zattr.emptyness = emptyness;
                     }
                     if !matches!(presence, PresenceAttribute::None) {
                         zattr.presence = presence;
@@ -65,12 +71,29 @@ impl ZenohAttribute {
 }
 
 #[derive(Clone, Default)]
+pub enum EmptynessAttribute {
+    #[default]
+    NotEmpty,
+    MaybeEmpty,
+}
+
+impl EmptynessAttribute {
+    fn from_meta(meta: &ParseNestedMeta) -> syn::Result<Self> {
+        if meta.path.is_ident("maybe_empty") {
+            return Ok(EmptynessAttribute::MaybeEmpty);
+        }
+
+        Ok(EmptynessAttribute::NotEmpty)
+    }
+}
+
+#[derive(Clone, Default)]
 pub enum SizeAttribute {
     #[default]
     None,
     Prefixed,
     Remain,
-    Header(Ident),
+    Header(ExprPath),
 }
 
 impl SizeAttribute {
@@ -85,7 +108,7 @@ impl SizeAttribute {
             } else if size == "header" {
                 let content;
                 parenthesized!(content in value);
-                let expr: Ident = content.parse()?;
+                let expr: ExprPath = content.parse()?;
                 return Ok(SizeAttribute::Header(expr));
             } else {
                 return Err(syn::Error::new_spanned(
@@ -104,7 +127,7 @@ pub enum PresenceAttribute {
     #[default]
     None,
     Prefixed,
-    Header(Ident),
+    Header(ExprPath),
 }
 
 impl PresenceAttribute {
@@ -117,7 +140,7 @@ impl PresenceAttribute {
             } else if presence == "header" {
                 let content;
                 parenthesized!(content in value);
-                let expr: Ident = content.parse()?;
+                let expr: ExprPath = content.parse()?;
                 return Ok(PresenceAttribute::Header(expr));
             } else {
                 return Err(syn::Error::new_spanned(
@@ -135,14 +158,14 @@ impl PresenceAttribute {
 pub enum HeaderAttribute {
     #[default]
     None,
-    Header(Ident),
+    Mask(ExprPath),
 }
 
 impl HeaderAttribute {
     fn from_meta(meta: &ParseNestedMeta) -> syn::Result<Self> {
         if meta.path.is_ident("header") {
-            let expr: Ident = meta.value()?.parse()?;
-            return Ok(HeaderAttribute::Header(expr));
+            let expr: ExprPath = meta.value()?.parse()?;
+            return Ok(HeaderAttribute::Mask(expr));
         }
 
         Ok(HeaderAttribute::None)

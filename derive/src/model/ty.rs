@@ -1,9 +1,8 @@
-use proc_macro2::Span;
 use syn::{Expr, Type, TypeArray, TypeReference};
 
 use crate::model::attribute::{
-    DefaultAttribute, ExtAttribute, HeaderAttribute, PresenceAttribute, SizeAttribute,
-    ZenohAttribute,
+    DefaultAttribute, EmptynessAttribute, ExtAttribute, HeaderAttribute, PresenceAttribute,
+    SizeAttribute, ZenohAttribute,
 };
 
 pub enum ZenohType {
@@ -14,6 +13,7 @@ pub enum ZenohType {
     USize,
 
     ByteArray { len: Expr },
+
     ByteSlice,
     Str,
 
@@ -24,8 +24,9 @@ pub enum ZenohType {
 
 impl ZenohType {
     pub fn check_attribute(&self, attr: &ZenohAttribute) -> syn::Result<()> {
-        let (s, p, h, e, d) = (
+        let (s, em, p, h, e, d) = (
             !matches!(attr.size, SizeAttribute::None),
+            !matches!(attr.emptyness, EmptynessAttribute::NotEmpty),
             !matches!(attr.presence, PresenceAttribute::None),
             !matches!(attr.header, HeaderAttribute::None),
             !matches!(attr.ext, ExtAttribute::None),
@@ -34,34 +35,38 @@ impl ZenohType {
 
         match self {
             ZenohType::U8 => {
-                if s || p || e || d {
+                if s || em || p || e || d {
                     return Err(syn::Error::new(
                         attr.span,
-                        "u8 type does not support size, presence, ext, or default attributes",
+                        "u8 type does not support size, emptyness, presence, ext, or default attributes",
                     ));
                 }
                 Ok(())
             }
-            ZenohType::U16 | ZenohType::U32 | ZenohType::U64 | ZenohType::USize => {
-                if s || p || h || e || d {
+            ZenohType::U16
+            | ZenohType::U32
+            | ZenohType::U64
+            | ZenohType::USize
+            | ZenohType::ByteArray { .. } => {
+                if s || em || p || h || e || d {
                     return Err(syn::Error::new(
                         attr.span,
-                        "u16, u32, u64, and usize types do not support size, presence, header, ext, or default attributes",
+                        "u16, u32, u64, usize and [u8; N] types do not support size, emptyness, presence, header, ext, or default attributes",
                     ));
                 }
                 Ok(())
             }
-            ZenohType::ByteArray { .. } | ZenohType::ByteSlice | ZenohType::Str => {
+            ZenohType::ByteSlice | ZenohType::Str => {
                 if p || h || e || d {
                     return Err(syn::Error::new(
                         attr.span,
-                        "string and byte array/slice types do not support presence, header, ext, or default attributes",
+                        "string and byte slice types do not support presence, header, ext, or default attributes",
                     ));
                 }
                 if !s {
                     return Err(syn::Error::new(
                         attr.span,
-                        "string and byte array/slice types require a size attribute",
+                        "string and byte slice types require a size attribute",
                     ));
                 }
                 Ok(())
@@ -79,28 +84,49 @@ impl ZenohType {
                         "structs with default attribute requires an ext attribute",
                     ));
                 }
+                if e && s {
+                    return Err(syn::Error::new(
+                        attr.span,
+                        "ZStruct type that are extensions cannot have a size attribute",
+                    ));
+                }
                 Ok(())
             }
             ZenohType::Option(inner_ty) => {
-                if d {
+                if d || h {
                     return Err(syn::Error::new(
                         attr.span,
-                        "Option type does not support a default attribute",
+                        "Option type does not support default or header attributes",
                     ));
                 }
 
-                if !p {
+                if !e && !p {
                     return Err(syn::Error::new(
                         attr.span,
-                        "Option type requires a presence attribute",
+                        "Option type that are not extensions must have a presence attribute",
+                    ));
+                }
+
+                if e && p {
+                    return Err(syn::Error::new(
+                        attr.span,
+                        "Option type that are extensions cannot have a presence attribute",
+                    ));
+                }
+
+                if e && s {
+                    return Err(syn::Error::new(
+                        attr.span,
+                        "Option type that are extensions cannot have a size attribute",
                     ));
                 }
 
                 let attr = ZenohAttribute {
                     size: attr.size.clone(),
+                    emptyness: attr.emptyness.clone(),
                     presence: PresenceAttribute::None,
-                    header: attr.header.clone(),
-                    ext: attr.ext.clone(),
+                    header: HeaderAttribute::None,
+                    ext: ExtAttribute::None,
                     default: DefaultAttribute::None,
                     span: attr.span.clone(),
                 };

@@ -8,8 +8,8 @@ mod tests;
 pub mod r#struct;
 pub use r#struct::*;
 
-// pub mod ext;
-// pub use ext::*;
+pub mod ext;
+pub use ext::*;
 
 pub type ZReader<'a> = &'a [u8];
 pub type ZWriter<'a> = &'a mut [u8];
@@ -37,7 +37,7 @@ pub trait ZReaderExt<'a> {
         self.remaining().gt(&0)
     }
 
-    fn get_u8(&self) -> ZResult<u8>;
+    fn peek_u8(&self) -> ZResult<u8>;
 
     fn read(&mut self, len: usize) -> ZResult<&'a [u8]>;
     fn read_u8(&mut self) -> ZResult<u8>;
@@ -77,7 +77,7 @@ impl<'a> ZReaderExt<'a> for ZReader<'a> {
         self.len()
     }
 
-    fn get_u8(&self) -> ZResult<u8> {
+    fn peek_u8(&self) -> ZResult<u8> {
         if !self.can_read() {
             return Err(ZCodecError::CouldNotRead);
         }
