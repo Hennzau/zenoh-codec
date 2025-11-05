@@ -1,5 +1,5 @@
 use proc_macro2::Span;
-use syn::{Expr, meta::ParseNestedMeta, parenthesized, spanned::Spanned};
+use syn::{Expr, Ident, LitStr, meta::ParseNestedMeta, parenthesized, spanned::Spanned};
 
 #[derive(Clone)]
 pub struct ZenohAttribute {
@@ -70,7 +70,7 @@ pub enum SizeAttribute {
     None,
     Prefixed,
     Remain,
-    Header(Expr),
+    Header(Ident),
 }
 
 impl SizeAttribute {
@@ -85,7 +85,7 @@ impl SizeAttribute {
             } else if size == "header" {
                 let content;
                 parenthesized!(content in value);
-                let expr: Expr = content.parse()?;
+                let expr: Ident = content.parse()?;
                 return Ok(SizeAttribute::Header(expr));
             } else {
                 return Err(syn::Error::new_spanned(
@@ -104,7 +104,7 @@ pub enum PresenceAttribute {
     #[default]
     None,
     Prefixed,
-    Header(Expr),
+    Header(Ident),
 }
 
 impl PresenceAttribute {
@@ -117,7 +117,7 @@ impl PresenceAttribute {
             } else if presence == "header" {
                 let content;
                 parenthesized!(content in value);
-                let expr: Expr = content.parse()?;
+                let expr: Ident = content.parse()?;
                 return Ok(PresenceAttribute::Header(expr));
             } else {
                 return Err(syn::Error::new_spanned(
@@ -135,13 +135,13 @@ impl PresenceAttribute {
 pub enum HeaderAttribute {
     #[default]
     None,
-    Header(Expr),
+    Header(Ident),
 }
 
 impl HeaderAttribute {
     fn from_meta(meta: &ParseNestedMeta) -> syn::Result<Self> {
         if meta.path.is_ident("header") {
-            let expr: Expr = meta.value()?.parse()?;
+            let expr: Ident = meta.value()?.parse()?;
             return Ok(HeaderAttribute::Header(expr));
         }
 

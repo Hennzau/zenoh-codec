@@ -6,12 +6,14 @@ mod option;
 mod str;
 mod uint;
 
-pub trait ZStruct {
+pub trait ZStructEncode {
     fn z_len(&self) -> usize;
 
     fn z_encode(&self, w: &mut ZWriter) -> ZResult<()>;
+}
 
-    type ZType<'a>: Sized;
-
-    fn z_decode<'a>(r: &mut ZReader<'a>) -> ZResult<Self::ZType<'a>>;
+pub trait ZStructDecode<'a> {
+    fn z_decode(r: &mut ZReader<'a>) -> ZResult<Self>
+    where
+        Self: Sized;
 }

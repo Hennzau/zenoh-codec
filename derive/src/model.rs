@@ -1,5 +1,5 @@
 use proc_macro2::TokenStream;
-use syn::Ident;
+use syn::{Generics, Ident, LitStr};
 
 use crate::model::{attribute::ZenohAttribute, ty::ZenohType};
 
@@ -30,8 +30,14 @@ impl ZenohField {
     }
 }
 
+pub struct HeaderDeclaration {
+    pub expr: LitStr,
+}
+
 pub struct ZenohStruct {
     pub ident: Ident,
+    pub generics: Generics,
+    pub header: Option<HeaderDeclaration>,
     pub fields: Vec<ZenohField>,
 }
 
@@ -51,8 +57,26 @@ impl ZenohStruct {
             }
         };
 
+        let mut header = Option::<HeaderDeclaration>::None;
+
+        for attr in &input.attrs {
+            if attr.path().is_ident("zenoh") {
+                attr.parse_nested_meta(|meta| {
+                    if meta.path.is_ident("header") {
+                        let value = meta.value()?;
+                        let expr: LitStr = value.parse()?;
+                        header.replace(HeaderDeclaration { expr });
+                    }
+
+                    Ok(())
+                })?;
+            }
+        }
+
         Ok(Self {
             ident: input.ident.clone(),
+            generics: input.generics.clone(),
+            header,
             fields,
         })
     }

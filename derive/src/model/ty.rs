@@ -73,19 +73,19 @@ impl ZenohType {
                         "ZStruct type does not support presence or header attributes",
                     ));
                 }
-                if e && !d {
+                if d && !e {
                     return Err(syn::Error::new(
                         attr.span,
-                        "structs with ext attribute must also have a default attribute",
+                        "structs with default attribute requires an ext attribute",
                     ));
                 }
                 Ok(())
             }
             ZenohType::Option(inner_ty) => {
-                if h || d {
+                if d {
                     return Err(syn::Error::new(
                         attr.span,
-                        "Option type does not support header or default attributes",
+                        "Option type does not support a default attribute",
                     ));
                 }
 
@@ -99,8 +99,8 @@ impl ZenohType {
                 let attr = ZenohAttribute {
                     size: attr.size.clone(),
                     presence: PresenceAttribute::None,
-                    header: HeaderAttribute::None,
-                    ext: ExtAttribute::None,
+                    header: attr.header.clone(),
+                    ext: attr.ext.clone(),
                     default: DefaultAttribute::None,
                     span: attr.span.clone(),
                 };

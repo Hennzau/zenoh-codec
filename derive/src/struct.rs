@@ -3,8 +3,14 @@ use syn::DeriveInput;
 
 use crate::model::ZenohStruct;
 
-pub fn derive_zstruct(input: DeriveInput) -> syn::Result<TokenStream> {
-    let _ = ZenohStruct::from_derive_input(&input)?;
+mod header;
 
-    Ok(quote::quote! {})
+pub fn derive_zstruct(input: DeriveInput) -> syn::Result<TokenStream> {
+    let r#struct = ZenohStruct::from_derive_input(&input)?;
+
+    let header = header::parse(&r#struct)?;
+
+    Ok(quote::quote! {
+        #header
+    })
 }

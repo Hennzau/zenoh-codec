@@ -1,6 +1,6 @@
-use crate::{ZReader, ZResult, ZWriter, r#struct::ZStruct};
+use crate::{ZResult, ZStructEncode, ZWriter};
 
-impl<T: ZStruct> ZStruct for Option<T> {
+impl<T: ZStructEncode> ZStructEncode for Option<T> {
     fn z_len(&self) -> usize {
         match self {
             Some(value) => value.z_len(),
@@ -13,11 +13,5 @@ impl<T: ZStruct> ZStruct for Option<T> {
             value.z_encode(w)?;
         }
         Ok(())
-    }
-
-    type ZType<'a> = T::ZType<'a>;
-
-    fn z_decode<'a>(r: &mut ZReader<'a>) -> ZResult<Self::ZType<'a>> {
-        T::z_decode(r)
     }
 }

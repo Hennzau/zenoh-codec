@@ -1,6 +1,8 @@
-use crate::{ZCodecError, ZReader, ZReaderExt, ZResult, ZWriter, ZWriterExt, r#struct::ZStruct};
+use crate::{
+    ZCodecError, ZReader, ZReaderExt, ZResult, ZStructDecode, ZStructEncode, ZWriter, ZWriterExt,
+};
 
-impl ZStruct for &'_ str {
+impl ZStructEncode for &'_ str {
     fn z_len(&self) -> usize {
         self.len()
     }
@@ -8,10 +10,10 @@ impl ZStruct for &'_ str {
     fn z_encode(&self, w: &mut ZWriter) -> ZResult<()> {
         w.write_exact(self.as_bytes())
     }
+}
 
-    type ZType<'a> = &'a str;
-
-    fn z_decode<'a>(r: &mut ZReader<'a>) -> ZResult<Self::ZType<'a>> {
+impl<'a> ZStructDecode<'a> for &'a str {
+    fn z_decode(r: &mut ZReader<'a>) -> ZResult<Self> {
         let bytes = r.read(r.remaining())?;
 
         core::str::from_utf8(bytes).map_err(|_| ZCodecError::CouldNotParse)

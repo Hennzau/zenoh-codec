@@ -1,6 +1,6 @@
-use crate::{ZReader, ZReaderExt, ZResult, ZWriter, ZWriterExt, r#struct::ZStruct};
+use crate::{ZReader, ZReaderExt, ZResult, ZStructDecode, ZStructEncode, ZWriter, ZWriterExt};
 
-impl ZStruct for &[u8] {
+impl ZStructEncode for &[u8] {
     fn z_len(&self) -> usize {
         self.len()
     }
@@ -8,10 +8,10 @@ impl ZStruct for &[u8] {
     fn z_encode(&self, w: &mut ZWriter) -> ZResult<()> {
         w.write_exact(self)
     }
+}
 
-    type ZType<'a> = &'a [u8];
-
-    fn z_decode<'a>(r: &mut ZReader<'a>) -> ZResult<Self::ZType<'a>> {
+impl<'a> ZStructDecode<'a> for &'a [u8] {
+    fn z_decode(r: &mut ZReader<'a>) -> ZResult<Self> {
         r.read(r.remaining())
     }
 }

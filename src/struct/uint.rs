@@ -1,6 +1,6 @@
-use crate::{ZReader, ZReaderExt, ZResult, ZWriter, ZWriterExt, r#struct::ZStruct};
+use crate::{ZReader, ZReaderExt, ZResult, ZStructDecode, ZStructEncode, ZWriter, ZWriterExt};
 
-impl ZStruct for u8 {
+impl ZStructEncode for u8 {
     fn z_len(&self) -> usize {
         1
     }
@@ -8,10 +8,10 @@ impl ZStruct for u8 {
     fn z_encode(&self, w: &mut ZWriter) -> ZResult<()> {
         w.write_u8(*self)
     }
+}
 
-    type ZType<'a> = u8;
-
-    fn z_decode<'a>(reader: &mut ZReader<'a>) -> ZResult<Self::ZType<'a>> {
+impl<'a> ZStructDecode<'a> for u8 {
+    fn z_decode(reader: &mut ZReader<'a>) -> ZResult<Self> {
         reader.read_u8()
     }
 }
@@ -49,7 +49,7 @@ const fn vle_len(x: u64) -> usize {
     }
 }
 
-impl ZStruct for u64 {
+impl ZStructEncode for u64 {
     fn z_len(&self) -> usize {
         vle_len(*self)
     }
@@ -81,10 +81,10 @@ impl ZStruct for u64 {
 
         Ok(())
     }
+}
 
-    type ZType<'a> = u64;
-
-    fn z_decode<'a>(r: &mut ZReader<'a>) -> ZResult<Self::ZType<'a>> {
+impl<'a> ZStructDecode<'a> for u64 {
+    fn z_decode(r: &mut ZReader<'a>) -> ZResult<Self> {
         let mut b = r.read_u8()?;
 
         let mut v = 0;
@@ -105,7 +105,7 @@ impl ZStruct for u64 {
 macro_rules! zint {
     ($($ty:ty),*) => {
         $(
-            impl ZStruct for $ty {
+            impl ZStructEncode for $ty {
                 fn z_len(&self) -> usize {
                     vle_len(*self as u64)
                 }
@@ -114,11 +114,11 @@ macro_rules! zint {
                     let v = *self as u64;
                     v.z_encode(w)
                 }
+            }
 
-                type ZType<'a> = $ty;
-
-                fn z_decode<'a>(r: &mut ZReader<'a>) -> ZResult<Self::ZType<'a>> {
-                    let v = <u64 as ZStruct>::z_decode(r)?;
+            impl<'a> ZStructDecode<'a> for $ty {
+                fn z_decode(r: &mut ZReader<'a>) -> ZResult<Self> {
+                    let v = <u64 as ZStructDecode>::z_decode(r)?;
                     Ok(v as $ty)
                 }
             }
