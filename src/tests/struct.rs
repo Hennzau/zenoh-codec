@@ -141,13 +141,17 @@ macro_rules! roundtrip {
         let mut data = [0u8; 256];
         let mut writer = &mut data.as_mut_slice();
 
-        // let len = <$ty as ZStructEncode>::z_len(&$value);
+        let len = <$ty as ZStructEncode>::z_len(&$value);
         <$ty as ZStructEncode>::z_encode(&$value, &mut writer).unwrap();
 
-        // let mut reader = data.as_slice();
-        // let decoded = <$ty as ZStructDecode>::z_decode(&mut reader.sub(len).unwrap()).unwrap();
+        let mut reader = data.as_slice();
+        let _header = reader.peek_u8().unwrap();
+        extern crate std;
+        std::println!("Header in binary format: {:08b}", _header);
 
-        // assert_eq!(decoded, $value);
+        let decoded = <$ty as ZStructDecode>::z_decode(&mut reader.sub(len).unwrap()).unwrap();
+
+        assert_eq!(decoded, $value);
     }};
 }
 
@@ -184,7 +188,7 @@ fn test_zoption_plain() {
 }
 
 #[test]
-fn test_zoption_flag_deduced() {
+fn test_zoption_header_remain() {
     let buf = [1, 2, 3];
     let s = ZOptionHeaderRemain {
         maybe_slice: Some(&buf),
@@ -212,7 +216,7 @@ fn test_znested_option() {
 }
 
 #[test]
-fn test_zflag_complex() {
+fn test_zheader_complex() {
     let buf = [5, 6, 7];
     let s = ZHeaderComplex {
         maybe_u8: Some(1),

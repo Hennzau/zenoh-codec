@@ -5,6 +5,7 @@ use crate::model::ZenohStruct;
 
 mod header;
 
+mod decode;
 mod encode;
 mod len;
 
@@ -19,6 +20,7 @@ pub fn derive_zstruct(input: DeriveInput) -> syn::Result<TokenStream> {
 
     let len = len::parse(&r#struct)?;
     let encode = encode::parse(&r#struct)?;
+    let decode = decode::parse(&r#struct)?;
 
     Ok(quote::quote! {
         #header
@@ -32,6 +34,12 @@ pub fn derive_zstruct(input: DeriveInput) -> syn::Result<TokenStream> {
                 #encode
 
                 Ok(())
+            }
+        }
+
+        impl<'a> zenoh_codec::ZStructDecode<'a> for #ident #ty_generics #where_clause {
+            fn z_decode(r: &mut zenoh_codec::ZReader<'a>) -> zenoh_codec::ZResult<Self> {
+                #decode
             }
         }
     })

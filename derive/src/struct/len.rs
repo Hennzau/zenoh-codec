@@ -1,93 +1,13 @@
 use proc_macro2::TokenStream;
 
 use crate::model::{
-    ZenohStruct,
-    attribute::{ExtAttribute, HeaderAttribute, PresenceAttribute, SizeAttribute, ZenohAttribute},
+    ZenohField, ZenohStruct,
+    attribute::{
+        DefaultAttribute, ExtAttribute, HeaderAttribute, PresenceAttribute, SizeAttribute,
+        ZenohAttribute,
+    },
     ty::ZenohType,
 };
-
-fn fill_ty(
-    ty: &ZenohType,
-    access: &TokenStream,
-    attr: &ZenohAttribute,
-    len_parts: &mut Vec<TokenStream>,
-) -> syn::Result<()> {
-    match ty {
-        ZenohType::U8
-        | ZenohType::U16
-        | ZenohType::U32
-        | ZenohType::U64
-        | ZenohType::USize
-        | ZenohType::ByteArray { .. } => {
-            if !matches!(attr.header, HeaderAttribute::None) {
-                return Ok(());
-            }
-
-            len_parts.push(quote::quote! {
-                < _ as zenoh_codec::ZStructEncode>::z_len(&self. #access)
-            });
-        }
-        ZenohType::ByteSlice | ZenohType::Str => {
-            if matches!(attr.size, SizeAttribute::Prefixed) {
-                len_parts.push(quote::quote! {
-                    <usize as zenoh_codec::ZStructEncode>::z_len(&< _ as zenoh_codec::ZStructEncode>::z_len(&self. #access))
-                });
-            }
-
-            len_parts.push(quote::quote! {
-                < _ as zenoh_codec::ZStructEncode>::z_len(&self. #access)
-            });
-        }
-        ZenohType::ZStruct => {
-            if matches!(attr.size, SizeAttribute::Prefixed) {
-                len_parts.push(quote::quote! {
-                    <usize as zenoh_codec::ZStructEncode>::z_len(&< _ as zenoh_codec::ZStructEncode>::z_len(&self. #access))
-                });
-            }
-
-            if !matches!(attr.ext, ExtAttribute::None) {
-                len_parts.push(quote::quote! {
-                    zenoh_codec::zext_len::<_>(&self. #access)
-                });
-            } else {
-                len_parts.push(quote::quote! {
-                    < _ as zenoh_codec::ZStructEncode>::z_len(&self. #access)
-                });
-            }
-        }
-        ZenohType::Option(_) => {
-            if matches!(attr.presence, PresenceAttribute::Prefixed) {
-                len_parts.push(quote::quote! { 1usize });
-            }
-
-            if matches!(attr.size, SizeAttribute::Prefixed) {
-                len_parts.push(quote::quote! {
-                    if let Some(inner) = &self. #access {
-                        <usize as zenoh_codec::ZStructEncode>::z_len(&< _ as zenoh_codec::ZStructEncode>::z_len(inner))
-                    } else {
-                        0usize
-                    }
-                });
-            }
-
-            if !matches!(attr.ext, ExtAttribute::None) {
-                len_parts.push(quote::quote! {
-                    if let Some(inner) = &self. #access {
-                        zenoh_codec::zext_len::<_>(inner)
-                    } else {
-                        0usize
-                    }
-                });
-            } else {
-                len_parts.push(quote::quote! {
-                    <_ as zenoh_codec::ZStructEncode>::z_len(&self. #access)
-                })
-            }
-        }
-    }
-
-    Ok(())
-}
 
 pub fn parse(r#struct: &ZenohStruct) -> syn::Result<TokenStream> {
     let mut len_parts = Vec::new();
@@ -97,11 +17,100 @@ pub fn parse(r#struct: &ZenohStruct) -> syn::Result<TokenStream> {
     }
 
     for field in &r#struct.fields {
-        let access = &field.access;
-        let ty = &field.ty;
-        let attr = &field.attr;
+        match field {
+            ZenohField::Regular { field } => {
+                let access = &field.access;
+                let ty = &field.ty;
+                let attr = &field.attr;
 
-        fill_ty(ty, access, attr, &mut len_parts)?;
+                if !matches!(attr.header, HeaderAttribute::None) {
+                    continue;
+                }
+
+                match ty {
+                    ZenohType::U8
+                    | ZenohType::U16
+                    | ZenohType::U32
+                    | ZenohType::U64
+                    | ZenohType::USize
+                    | ZenohType::ByteArray { .. } => {
+                        len_parts.push(quote::quote! {
+                            < _ as zenoh_codec::ZStructEncode>::z_len(&self. #access)
+                        });
+                    }
+                    ZenohType::ByteSlice | ZenohType::Str | ZenohType::ZStruct => {
+                        if matches!(attr.size, SizeAttribute::Prefixed) {
+                            len_parts.push(quote::quote! {
+                                <usize as zenoh_codec::ZStructEncode>::z_len(&< _ as zenoh_codec::ZStructEncode>::z_len(&self. #access))
+                            });
+                        }
+
+                        len_parts.push(quote::quote! {
+                            < _ as zenoh_codec::ZStructEncode>::z_len(&self. #access)
+                        });
+                    }
+                    ZenohType::Option(_) => {
+                        if matches!(attr.presence, PresenceAttribute::Prefixed) {
+                            len_parts.push(quote::quote! { 1usize });
+                        }
+
+                        if matches!(attr.size, SizeAttribute::Prefixed) {
+                            len_parts.push(quote::quote! {
+                                if let Some(inner) = &self. #access {
+                                    <usize as zenoh_codec::ZStructEncode>::z_len(&< _ as zenoh_codec::ZStructEncode>::z_len(inner))
+                                } else {
+                                    0usize
+                                }
+                            });
+                        }
+
+                        len_parts.push(quote::quote! {
+                            if let Some(inner) = &self. #access {
+                                < _ as zenoh_codec::ZStructEncode>::z_len(inner)
+                            } else {
+                                0usize
+                            }
+                        })
+                    }
+                }
+            }
+            ZenohField::ExtBlock { exts } => {
+                for field in exts {
+                    let access = &field.access;
+                    let ty = &field.ty;
+                    let attr = &field.attr;
+
+                    match ty {
+                        ZenohType::ZStruct => match &attr.default {
+                            DefaultAttribute::Expr(expr) => {
+                                len_parts.push(quote::quote! {
+                                    if &self. #access  != &#expr {
+                                        zenoh_codec::zext_len::<_>(&self. #access)
+                                    } else {
+                                        0usize
+                                    }
+                                });
+                            }
+                            _ => len_parts.push(quote::quote! {
+                                zenoh_codec::zext_len::<_>(&self. #access)
+                            }),
+                        },
+                        ZenohType::Option(_) => {
+                            len_parts.push(quote::quote! {
+                                if let Some(inner) = &self. #access {
+                                    zenoh_codec::zext_len::<_>(inner)
+                                } else {
+                                    0usize
+                                }
+                            });
+                        }
+                        _ => unreachable!(
+                            "Only ZStruct and Option<ZStruct> are allowed in ext blocks, this should have been caught earlier"
+                        ),
+                    }
+                }
+            }
+        }
     }
 
     if len_parts.is_empty() {

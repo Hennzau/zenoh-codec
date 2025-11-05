@@ -2,7 +2,6 @@ use crate::{ZReader, ZResult, ZWriter};
 
 mod array;
 mod bytes;
-mod option;
 mod str;
 mod uint;
 

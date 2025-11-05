@@ -9,13 +9,13 @@ use crate::model::{
 pub mod attribute;
 pub mod ty;
 
-pub struct ZenohField {
+pub struct ZenohFieldInner {
     pub attr: ZenohAttribute,
     pub ty: ZenohType,
     pub access: TokenStream,
 }
 
-impl ZenohField {
+impl ZenohFieldInner {
     pub fn from_field(field: &syn::Field) -> syn::Result<Self> {
         let attr = ZenohAttribute::from_field(field)?;
 
@@ -35,6 +35,11 @@ impl ZenohField {
 
 pub struct HeaderDeclaration {
     pub expr: LitStr,
+}
+
+pub enum ZenohField {
+    Regular { field: ZenohFieldInner },
+    ExtBlock { exts: Vec<ZenohFieldInner> },
 }
 
 pub struct ZenohStruct {
@@ -60,12 +65,13 @@ impl ZenohStruct {
         let mut found_ext_block = false;
         let mut in_ext_block = false;
         for field in fields {
-            let field = ZenohField::from_field(field)?;
+            let field = ZenohFieldInner::from_field(field)?;
             let is_ext = !matches!(field.attr.ext, ExtAttribute::None);
             if is_ext {
                 if !found_ext_block {
                     found_ext_block = true;
                     in_ext_block = true;
+                    fields_vec.push(ZenohField::ExtBlock { exts: vec![] });
                 } else if !in_ext_block {
                     return Err(syn::Error::new_spanned(
                         field.access.clone(),
@@ -75,7 +81,20 @@ impl ZenohStruct {
             } else {
                 in_ext_block = false;
             }
-            fields_vec.push(field);
+
+            if is_ext {
+                match fields_vec
+                    .last_mut()
+                    .expect("Expected ext block, something went wrong")
+                {
+                    ZenohField::ExtBlock { exts } => {
+                        exts.push(field);
+                    }
+                    _ => unreachable!("Expected ext block, something went wrong"),
+                }
+            } else {
+                fields_vec.push(ZenohField::Regular { field });
+            }
         }
 
         let mut header = Option::<HeaderDeclaration>::None;
