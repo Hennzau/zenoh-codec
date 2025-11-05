@@ -12,14 +12,32 @@ pub fn parse(r#struct: &ZenohStruct) -> syn::Result<TokenStream> {
         let mut shift = 8u8;
         let content = header.expr.value();
         let mut const_defs = Vec::new();
+        let mut base_header = Vec::new();
 
         for part in content.split('|') {
             let part = part.trim();
             if part.is_empty() {
                 continue;
             }
-            const_defs.push(parse_part(part, &mut shift, header.expr.span())?);
+            const_defs.push(parse_part(
+                part,
+                &mut shift,
+                &mut base_header,
+                header.expr.span(),
+            )?);
         }
+
+        let base_header = if base_header.is_empty() {
+            quote::quote! { 0u8 }
+        } else {
+            let combined = base_header
+                .into_iter()
+                .reduce(|acc, expr| {
+                    quote::quote! { (#acc) | (#expr) }
+                })
+                .unwrap();
+            combined
+        };
 
         if shift != 0 {
             return Err(syn::Error::new(
@@ -30,6 +48,8 @@ pub fn parse(r#struct: &ZenohStruct) -> syn::Result<TokenStream> {
 
         Ok(quote::quote! {
             impl #impl_generics #ident #ty_generics #where_clause {
+                const BASE_HEADER: u8 = #base_header;
+
                 #(#const_defs)*
             }
         })
@@ -38,7 +58,12 @@ pub fn parse(r#struct: &ZenohStruct) -> syn::Result<TokenStream> {
     }
 }
 
-fn parse_part(part: &str, shift: &mut u8, span: Span) -> syn::Result<TokenStream> {
+fn parse_part(
+    part: &str,
+    shift: &mut u8,
+    base_header: &mut Vec<TokenStream>,
+    span: Span,
+) -> syn::Result<TokenStream> {
     if part == "_" {
         *shift = shift.saturating_sub(1);
         return Ok(quote::quote! {});
@@ -83,6 +108,8 @@ fn parse_part(part: &str, shift: &mut u8, span: Span) -> syn::Result<TokenStream
                 })?
             };
 
+            let result = value;
+
             let left = 255u8 >> (8 - *shift);
             let right = 255u8 << (*shift - size);
 
@@ -92,8 +119,11 @@ fn parse_part(part: &str, shift: &mut u8, span: Span) -> syn::Result<TokenStream
 
             let value: u8 = value << *shift;
 
+            let value = quote::quote! { (#value) & ((#left) & (#right)) };
+            base_header.push(quote::quote! { (#value) });
+
             return Ok(quote::quote! {
-                pub const #name: u8 = (#value) & ((#left) & (#right));
+                pub const #name: u8 = #result;
             });
         } else {
             let left = 255u8 >> (8 - *shift);

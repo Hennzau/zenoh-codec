@@ -72,10 +72,10 @@ impl ZenohType {
                 Ok(())
             }
             ZenohType::ZStruct => {
-                if p || h {
+                if p {
                     return Err(syn::Error::new(
                         attr.span,
-                        "ZStruct type does not support presence or header attributes",
+                        "ZStruct type does not support presence attribute",
                     ));
                 }
                 if d && !e {

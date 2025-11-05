@@ -1,5 +1,6 @@
 use zenoh_codec::{ZExt, ZStruct, ZStructDecode, ZStructEncode};
 
+#[derive(Default, PartialEq)]
 pub struct ZStruct0 {}
 impl ZStructEncode for ZStruct0 {
     fn z_len(&self) -> usize {
@@ -29,20 +30,26 @@ pub struct ZStruct1<'a> {
     #[zenoh(presence = prefixed, size = prefixed)]
     pub b: Option<&'a str>,
 
-    #[zenoh(presence = header(Z))]
+    #[zenoh(presence = header(Self::E))]
     pub u: Option<u64>,
 
-    #[zenoh(presence = header(Z), size = header(I))]
+    #[zenoh(presence = header(Self::E), size = header(Self::T))]
     pub g: Option<&'a [u8]>,
 
     #[zenoh(ext = 0x1)]
-    pub c: ZStruct0,
+    pub c: ZStruct0, // Mandatory. Will always be present and sent.
     #[zenoh(ext = 0x2)]
-    pub d: Option<ZStruct0>,
-    #[zenoh(ext = 0x1)]
+    pub d: Option<ZStruct0>, // Optional. May be absent.
+    #[zenoh(ext = 0x3)]
     pub i: Option<ZStruct0>,
-    #[zenoh(ext = 0x2)]
+    #[zenoh(ext = 0x4)] // Optional. May be absent.
     pub p: Option<ZStruct0>,
+    #[zenoh(ext = 0x5, default = Self::DEFAULT_ZSTRUCT0)]
+    pub f: ZStruct0, // Not mandatory, has a default value.
+}
+
+impl ZStruct1<'_> {
+    const DEFAULT_ZSTRUCT0: ZStruct0 = ZStruct0 {};
 }
 
 fn main() {}
