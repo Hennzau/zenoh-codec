@@ -23,7 +23,7 @@ pub enum ZCodecError {
 
     FieldExceedsReservedSize = 3,
 
-    MissingMandatoryExtension = 4,
+    UnsupportedMandatoryExtension = 4,
 }
 
 pub type ZResult<T> = core::result::Result<T, ZCodecError>;

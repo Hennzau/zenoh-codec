@@ -2,10 +2,7 @@ use proc_macro2::TokenStream;
 
 use crate::model::{
     ZenohField, ZenohStruct,
-    attribute::{
-        DefaultAttribute, ExtAttribute, HeaderAttribute, PresenceAttribute, SizeAttribute,
-        ZenohAttribute,
-    },
+    attribute::{DefaultAttribute, HeaderAttribute, PresenceAttribute, SizeAttribute},
     ty::ZenohType,
 };
 
@@ -33,7 +30,7 @@ pub fn parse(r#struct: &ZenohStruct) -> syn::Result<TokenStream> {
                     | ZenohType::U32
                     | ZenohType::U64
                     | ZenohType::USize
-                    | ZenohType::ByteArray { .. } => {
+                    | ZenohType::ByteArray => {
                         len_parts.push(quote::quote! {
                             < _ as zenoh_codec::ZStructEncode>::z_len(&self. #access)
                         });

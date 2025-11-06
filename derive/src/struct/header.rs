@@ -30,13 +30,12 @@ pub fn parse(r#struct: &ZenohStruct) -> syn::Result<TokenStream> {
         let base_header = if base_header.is_empty() {
             quote::quote! { 0u8 }
         } else {
-            let combined = base_header
+            base_header
                 .into_iter()
                 .reduce(|acc, expr| {
                     quote::quote! { (#acc) | (#expr) }
                 })
-                .unwrap();
-            combined
+                .unwrap()
         };
 
         if shift != 0 {
@@ -92,11 +91,18 @@ fn parse_part(
             )
         })?;
         if let Some(value_str) = value_opt {
-            let value: u8 = if value_str.starts_with("0x") {
-                u8::from_str_radix(&value_str[2..], 16).map_err(|_| {
+            let value: u8 = if let Some(stripped) = value_str.strip_prefix("0x") {
+                u8::from_str_radix(stripped, 16).map_err(|_| {
                     syn::Error::new(
                         span,
                         format!("Invalid hex value '{}' in header declaration", value_str),
+                    )
+                })?
+            } else if let Some(stripped) = value_str.strip_prefix("0b") {
+                u8::from_str_radix(stripped, 2).map_err(|_| {
+                    syn::Error::new(
+                        span,
+                        format!("Invalid binary value '{}' in header declaration", value_str),
                     )
                 })?
             } else {
@@ -122,9 +128,9 @@ fn parse_part(
             let value = quote::quote! { (#value) & ((#left) & (#right)) };
             base_header.push(quote::quote! { (#value) });
 
-            return Ok(quote::quote! {
+            Ok(quote::quote! {
                 pub const #name: u8 = #result;
-            });
+            })
         } else {
             let left = 255u8 >> (8 - *shift);
             let right = 255u8 << (*shift - size);
@@ -133,22 +139,22 @@ fn parse_part(
                 syn::Error::new(span, "Not enough bits left in header declaration")
             })?;
 
-            return Ok(quote::quote! {
+            Ok(quote::quote! {
                 const #name: u8 = (#left) & (#right);
-            });
+            })
         }
     } else if value_opt.is_some() {
-        return Err(syn::Error::new(
+        Err(syn::Error::new(
             span,
             "Affectation without size is not allowed in header declaration",
-        ));
+        ))
     } else {
         *shift = shift
             .checked_sub(1)
             .ok_or_else(|| syn::Error::new(span, "Not enough bits left in header declaration"))?;
 
-        return Ok(quote::quote! {
+        Ok(quote::quote! {
             const #name: u8 = 1 << #shift;
-        });
+        })
     }
 }

@@ -38,7 +38,7 @@ pub struct HeaderDeclaration {
 }
 
 pub enum ZenohField {
-    Regular { field: ZenohFieldInner },
+    Regular { field: Box<ZenohFieldInner> },
     ExtBlock { exts: Vec<ZenohFieldInner> },
 }
 
@@ -93,7 +93,9 @@ impl ZenohStruct {
                     _ => unreachable!("Expected ext block, something went wrong"),
                 }
             } else {
-                fields_vec.push(ZenohField::Regular { field });
+                fields_vec.push(ZenohField::Regular {
+                    field: Box::new(field),
+                });
             }
         }
 

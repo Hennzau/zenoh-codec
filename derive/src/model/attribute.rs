@@ -6,7 +6,8 @@ pub struct ZenohAttribute {
     pub span: Span,
 
     pub size: SizeAttribute,
-    pub emptyness: EmptynessAttribute,
+    pub maybe_empty: bool,
+    pub mandatory: bool,
     pub presence: PresenceAttribute,
     pub header: HeaderAttribute,
     pub ext: ExtAttribute,
@@ -18,7 +19,8 @@ impl Default for ZenohAttribute {
         ZenohAttribute {
             span: Span::call_site(),
             size: SizeAttribute::default(),
-            emptyness: EmptynessAttribute::default(),
+            maybe_empty: false,
+            mandatory: false,
             presence: PresenceAttribute::default(),
             header: HeaderAttribute::default(),
             ext: ExtAttribute::default(),
@@ -29,14 +31,17 @@ impl Default for ZenohAttribute {
 
 impl ZenohAttribute {
     pub fn from_field(field: &syn::Field) -> syn::Result<Self> {
-        let mut zattr = ZenohAttribute::default();
-        zattr.span = field.ident.span();
+        let mut zattr = ZenohAttribute {
+            span: field.ident.span(),
+            ..Default::default()
+        };
 
         for attr in &field.attrs {
             if attr.path().is_ident("zenoh") {
                 attr.parse_nested_meta(|meta| {
                     let size = SizeAttribute::from_meta(&meta)?;
-                    let emptyness = EmptynessAttribute::from_meta(&meta)?;
+                    let maybe_empty = maybe_empty_from_meta(&meta)?;
+                    let mandatory = mandatory_from_meta(&meta)?;
                     let presence = PresenceAttribute::from_meta(&meta)?;
                     let header = HeaderAttribute::from_meta(&meta)?;
                     let default = DefaultAttribute::from_meta(&meta)?;
@@ -45,8 +50,11 @@ impl ZenohAttribute {
                     if !matches!(size, SizeAttribute::None) {
                         zattr.size = size;
                     }
-                    if !matches!(emptyness, EmptynessAttribute::NotEmpty) {
-                        zattr.emptyness = emptyness;
+                    if maybe_empty {
+                        zattr.maybe_empty = true;
+                    }
+                    if mandatory {
+                        zattr.mandatory = true;
                     }
                     if !matches!(presence, PresenceAttribute::None) {
                         zattr.presence = presence;
@@ -70,21 +78,20 @@ impl ZenohAttribute {
     }
 }
 
-#[derive(Clone, Default)]
-pub enum EmptynessAttribute {
-    #[default]
-    NotEmpty,
-    MaybeEmpty,
+fn maybe_empty_from_meta(meta: &ParseNestedMeta) -> syn::Result<bool> {
+    if meta.path.is_ident("maybe_empty") {
+        return Ok(true);
+    }
+
+    Ok(false)
 }
 
-impl EmptynessAttribute {
-    fn from_meta(meta: &ParseNestedMeta) -> syn::Result<Self> {
-        if meta.path.is_ident("maybe_empty") {
-            return Ok(EmptynessAttribute::MaybeEmpty);
-        }
-
-        Ok(EmptynessAttribute::NotEmpty)
+fn mandatory_from_meta(meta: &ParseNestedMeta) -> syn::Result<bool> {
+    if meta.path.is_ident("mandatory") {
+        return Ok(true);
     }
+
+    Ok(false)
 }
 
 #[derive(Clone, Default)]

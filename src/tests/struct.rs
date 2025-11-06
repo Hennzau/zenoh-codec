@@ -18,7 +18,7 @@ struct ZWithLifetime<'a> {
 }
 
 #[derive(ZStruct, PartialEq, Debug)]
-struct ZOptionPlain<'a> {
+struct ZOptionPrefixed<'a> {
     #[zenoh(presence = prefixed)]
     pub maybe_u32: Option<u32>,
 
@@ -80,7 +80,7 @@ struct ZArrays<'a> {
     pub fixed_array: [u8; 8],
 
     #[zenoh(size = prefixed)]
-    pub slice_plain: &'a [u8],
+    pub slice_prefixed: &'a [u8],
 
     #[zenoh(size = remain)]
     pub no_size_str: &'a str,
@@ -145,10 +145,6 @@ macro_rules! roundtrip {
         <$ty as ZStructEncode>::z_encode(&$value, &mut writer).unwrap();
 
         let mut reader = data.as_slice();
-        let _header = reader.peek_u8().unwrap();
-        extern crate std;
-        std::println!("Header in binary format: {:08b}", _header);
-
         let decoded = <$ty as ZStructDecode>::z_decode(&mut reader.sub(len).unwrap()).unwrap();
 
         assert_eq!(decoded, $value);
@@ -173,18 +169,18 @@ fn test_zwitlifetime() {
 }
 
 #[test]
-fn test_zoption_plain() {
-    let s = ZOptionPlain {
+fn test_zoption_prefixed() {
+    let s = ZOptionPrefixed {
         maybe_u32: Some(99),
         maybe_str: Some("hello"),
     };
-    roundtrip!(ZOptionPlain, s);
+    roundtrip!(ZOptionPrefixed, s);
 
-    let s2 = ZOptionPlain {
+    let s2 = ZOptionPrefixed {
         maybe_u32: None,
         maybe_str: None,
     };
-    roundtrip!(ZOptionPlain, s2);
+    roundtrip!(ZOptionPrefixed, s2);
 }
 
 #[test]
@@ -232,7 +228,7 @@ fn test_zarrays() {
     let fixed = [9; 8];
     let s = ZArrays {
         fixed_array: fixed,
-        slice_plain: &[1, 2, 3],
+        slice_prefixed: &[1, 2, 3],
         no_size_str: "str",
     };
     roundtrip!(ZArrays, s);

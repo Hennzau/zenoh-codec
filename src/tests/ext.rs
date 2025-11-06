@@ -1,259 +1,214 @@
-// use crate::{self as zenoh_codec, ZExt, ZExtKind, ZReaderExt, ZStruct, marker, zextattribute};
+use crate::{
+    self as zenoh_codec, ZExt, ZExtKind, ZReaderExt, ZStruct, ZStructDecode, ZStructEncode,
+};
 
-// #[derive(ZExt, PartialEq, Debug)]
-// pub struct ZExtEmpty {}
+#[derive(ZExt, PartialEq, Debug)]
+pub struct ZExtEmpty {}
 
-// #[derive(ZExt, PartialEq, Debug)]
-// pub struct ZExtCounter {
-//     pub counter: u64,
-// }
+#[derive(ZExt, PartialEq, Debug)]
+pub struct ZExtCounter {
+    pub counter: u64,
+}
 
-// #[derive(ZExt, PartialEq, Debug)]
-// pub struct ZExtData<'a> {
-//     #[size(plain)]
-//     pub bytes: &'a [u8],
-// }
+#[derive(ZExt, PartialEq, Debug)]
+pub struct ZExtData<'a> {
+    #[zenoh(size = prefixed)]
+    pub bytes: &'a [u8],
+}
 
-// #[derive(ZExt, PartialEq, Debug)]
-// pub struct ZExtInfo<'a> {
-//     pub id: u16,
-//     #[size(deduced)]
-//     pub name: &'a str,
-// }
+#[derive(ZExt, PartialEq, Debug)]
+pub struct ZExtInfo<'a> {
+    pub id: u16,
+    #[zenoh(size = remain)]
+    pub name: &'a str,
+}
 
-// #[derive(ZExt, PartialEq, Debug)]
-// pub struct ZExtFlagged<'a> {
-//     _flag: marker::Flag,
+#[derive(ZExt, PartialEq, Debug)]
+#[zenoh(header = "Z|E|_|_|_|_|_|_")]
+pub struct ZExtHeader<'a> {
+    #[zenoh(presence = header(Self::Z))]
+    pub maybe_u8: Option<u8>,
 
-//     #[option(flag)]
-//     pub maybe_u8: Option<u8>,
+    #[zenoh(presence = header(Self::E), size = remain)]
+    pub maybe_str: Option<&'a str>,
+}
 
-//     #[option(flag, size(deduced))]
-//     pub maybe_str: Option<&'a str>,
-// }
+#[derive(ZStruct, PartialEq, Debug)]
+#[zenoh(header = "Z|_|_|_|_|_|_|_")]
+pub struct ZMsgOption<'a> {
+    #[zenoh(size = prefixed)]
+    pub title: &'a str,
 
-// #[derive(ZStruct, PartialEq, Debug)]
-// pub struct ZMsgSimple<'a> {
-//     #[size(plain)]
-//     pub title: &'a str,
+    #[zenoh(ext = 0x1)]
+    pub ext_data: Option<ZExtData<'a>>,
+    #[zenoh(ext = 0x2)]
+    pub ext_info: Option<ZExtInfo<'a>>,
 
-//     #[option(plain)]
-//     pub _begin: marker::ExtBlockBegin,
-//     pub ext_data: Option<ZExtData<'a>>,
-//     pub ext_info: Option<ZExtInfo<'a>>,
-//     pub _end: marker::ExtBlockEnd,
+    #[zenoh(size = remain)]
+    pub payload: &'a [u8],
+}
 
-//     #[size(deduced)]
-//     pub payload: &'a [u8],
-// }
+#[derive(ZStruct, PartialEq, Debug)]
+#[zenoh(header = "Z|_|_|_|_|_|_|_")]
+pub struct ZMsgMix<'a> {
+    #[zenoh(size = prefixed)]
+    pub topic: &'a str,
 
-// #[derive(ZStruct, PartialEq, Debug)]
-// pub struct ZMsgHeader<'a> {
-//     _header: marker::Header,
+    #[zenoh(ext = 0x1)]
+    pub ext_header: Option<ZExtHeader<'a>>,
+    #[zenoh(ext = 0x2, default = Self::DEFAULT_EXT_EMPTY)]
+    pub ext_empty: ZExtEmpty,
 
-//     #[size(plain)]
-//     pub topic: &'a str,
+    pub value: u32,
+}
 
-//     #[option(header = 0b1000_0000)]
-//     pub _begin: marker::ExtBlockBegin,
-//     pub ext_flagged: Option<ZExtFlagged<'a>>,
-//     pub ext_empty: Option<ZExtEmpty>,
-//     pub _end: marker::ExtBlockEnd,
+impl ZMsgMix<'_> {
+    const DEFAULT_EXT_EMPTY: ZExtEmpty = ZExtEmpty {};
+}
 
-//     pub value: u32,
-// }
+#[derive(ZStruct, PartialEq, Debug)]
+#[zenoh(header = "Z|_|_|_|_|_|_|_")]
+pub struct ZMsgCounters {
+    #[zenoh(ext = 0x1)]
+    pub ext1: Option<ZExtCounter>,
 
-// #[derive(ZStruct, PartialEq, Debug)]
-// pub struct ZMsgCounters {
-//     _flag: marker::Flag,
+    pub checksum: u16,
+}
 
-//     #[option(flag)]
-//     pub _begin: marker::ExtBlockBegin,
-//     pub ext1: Option<ZExtCounter>,
-//     pub _end: marker::ExtBlockEnd,
+#[derive(ZStruct, PartialEq, Debug)]
+#[zenoh(header = "Z|_|_|_|_|_|_|_")]
+pub struct ZMsgComplex<'a> {
+    #[zenoh(size = prefixed)]
+    pub name: &'a str,
 
-//     pub checksum: u16,
-// }
+    #[zenoh(ext = 0x1)]
+    pub ext_info: Option<ZExtInfo<'a>>,
+    #[zenoh(ext = 0x2, default = Self::DEFAULT_EXT_DATA)]
+    pub ext_data: ZExtData<'a>,
+    #[zenoh(ext = 0x3, default = Self::DEFAULT_EXT_EMPTY)]
+    pub ext_empty: ZExtEmpty,
 
-// #[derive(ZStruct, PartialEq, Debug)]
-// pub struct ZMsgComplex<'a> {
-//     _header: marker::Header,
+    #[zenoh(size = remain)]
+    pub trailing: &'a str,
+}
 
-//     #[size(plain)]
-//     pub name: &'a str,
+impl ZMsgComplex<'_> {
+    const DEFAULT_EXT_DATA: ZExtData<'static> = ZExtData { bytes: &[] };
+    const DEFAULT_EXT_EMPTY: ZExtEmpty = ZExtEmpty {};
+}
 
-//     #[option(header = 0b1000_0000)]
-//     pub _begin: marker::ExtBlockBegin,
-//     pub ext_info: Option<ZExtInfo<'a>>,
-//     pub ext_data: Option<ZExtData<'a>>,
-//     pub ext_empty: Option<ZExtEmpty>,
-//     pub _end: marker::ExtBlockEnd,
+#[derive(ZStruct, PartialEq, Debug)]
+#[zenoh(header = "Z|_|_|_|_|_|_|_")]
+pub struct ZMsgComplexOption<'a> {
+    #[zenoh(size = prefixed)]
+    pub name: &'a str,
 
-//     #[size(deduced)]
-//     pub trailing: &'a str,
-// }
+    #[zenoh(ext = 0x1)]
+    pub ext_info: Option<ZExtInfo<'a>>,
+    #[zenoh(ext = 0x2)]
+    pub ext_data: Option<ZExtData<'a>>,
+    #[zenoh(ext = 0x3)]
+    pub ext_empty: Option<ZExtEmpty>,
 
-// zextattribute!(impl<'a> ZExtData<'a>, ZMsgSimple<'a>, 0x01, true);
-// zextattribute!(impl<'a> ZExtInfo<'a>, ZMsgSimple<'a>, 0x02, true);
+    #[zenoh(size = remain)]
+    pub trailing: &'a str,
+}
 
-// zextattribute!(impl<'a> ZExtFlagged<'a>, ZMsgHeader<'a>, 0x01, true);
-// zextattribute!(impl<'a> ZExtEmpty, ZMsgHeader<'a>, 0x02, true);
+macro_rules! roundtrip {
+    ($ty:ty, $value:expr) => {{
+        let mut data = [0u8; 256];
+        let mut writer = &mut data.as_mut_slice();
 
-// zextattribute!(ZExtCounter, ZMsgCounters, 0x01, true);
+        let len = <$ty as ZStructEncode>::z_len(&$value);
+        <$ty as ZStructEncode>::z_encode(&$value, &mut writer).unwrap();
 
-// zextattribute!(impl<'a> ZExtInfo<'a>, ZMsgComplex<'a>, 0x01, true);
-// zextattribute!(impl<'a> ZExtData<'a>, ZMsgComplex<'a>, 0x02, true);
-// zextattribute!(impl<'a> ZExtEmpty, ZMsgComplex<'a>, 0x03, true);
+        let mut reader = data.as_slice();
+        let decoded = <$ty as ZStructDecode>::z_decode(&mut reader.sub(len).unwrap()).unwrap();
 
-// macro_rules! roundtrip {
-//     ($ty:ty, $value:expr) => {{
-//         let mut data = [0u8; 256];
-//         let mut writer = &mut data.as_mut_slice();
+        assert_eq!(decoded, $value);
+    }};
+}
 
-//         let len = <$ty as ZStruct>::z_len(&$value);
-//         <$ty as ZStruct>::z_encode(&$value, &mut writer).unwrap();
+#[test]
+fn test_zext_kinds() {
+    assert_eq!(ZExtEmpty::KIND, ZExtKind::Unit);
+    assert_eq!(ZExtCounter::KIND, ZExtKind::U64);
+    assert_eq!(ZExtData::KIND, ZExtKind::ZStruct);
+    assert_eq!(ZExtInfo::KIND, ZExtKind::ZStruct);
+    assert_eq!(ZExtHeader::KIND, ZExtKind::ZStruct);
+}
 
-//         let mut reader = data.as_slice();
-//         let decoded = <$ty as ZStruct>::z_decode(&mut reader.sub(len).unwrap()).unwrap();
+#[test]
+fn test_zmsg_simple() {
+    let buf = [1, 2, 3, 4];
+    let msg = ZMsgOption {
+        title: "simple",
+        ext_data: Some(ZExtData { bytes: &buf }),
+        ext_info: Some(ZExtInfo {
+            id: 99,
+            name: "info",
+        }),
+        payload: &buf,
+    };
+    roundtrip!(ZMsgOption, msg);
+}
 
-//         assert_eq!(decoded, $value);
-//     }};
+#[test]
+fn test_zmsg_header() {
+    let msg = ZMsgMix {
+        topic: "topic/1",
+        ext_header: Some(ZExtHeader {
+            maybe_u8: Some(7),
+            maybe_str: Some("extra"),
+        }),
+        ext_empty: ZExtEmpty {},
+        value: 12345,
+    };
+    roundtrip!(ZMsgMix, msg);
+}
 
-//     (ext, $ty:ty, $value:expr) => {{
-//         let mut data = [0u8; 256];
-//         let mut writer = &mut data.as_mut_slice();
+#[test]
+fn test_zmsg_counters() {
+    let msg = ZMsgCounters {
+        ext1: Some(ZExtCounter { counter: 10 }),
+        checksum: 55,
+    };
+    roundtrip!(ZMsgCounters, msg);
+}
 
-//         <$ty as ZExt>::z_encode(&$value, &mut writer).unwrap();
+#[test]
+fn test_zmsg_complex() {
+    let data = [9, 9, 9];
+    let msg = ZMsgComplex {
+        name: "complex",
+        ext_info: Some(ZExtInfo {
+            id: 11,
+            name: "ext",
+        }),
+        ext_data: ZExtData { bytes: &data },
+        ext_empty: ZExtEmpty {},
+        trailing: "end",
+    };
+    roundtrip!(ZMsgComplex, msg);
+}
 
-//         let mut reader = data.as_slice();
-//         let decoded = <$ty as ZExt>::z_decode(&mut reader).unwrap();
+#[test]
+fn test_zmsg_partial_exts() {
+    let msg = ZMsgComplex {
+        name: "partial",
+        ext_info: None,
+        ext_data: ZExtData { bytes: &[1, 2, 3] },
+        ext_empty: ZExtEmpty {},
+        trailing: "zzz",
+    };
 
-//         assert_eq!(decoded, $value);
-//     }};
-// }
-
-// #[test]
-// fn test_zext_kinds() {
-//     assert_eq!(ZExtEmpty::KIND, ZExtKind::Unit);
-//     assert_eq!(ZExtCounter::KIND, ZExtKind::U64);
-//     assert_eq!(ZExtData::KIND, ZExtKind::ZStruct);
-//     assert_eq!(ZExtInfo::KIND, ZExtKind::ZStruct);
-//     assert_eq!(ZExtFlagged::KIND, ZExtKind::ZStruct);
-// }
-
-// #[test]
-// fn test_zext_roundtrips() {
-//     let buf = [10, 20, 30];
-//     roundtrip!(ext, ZExtData, ZExtData { bytes: &buf });
-
-//     roundtrip!(
-//         ext,
-//         ZExtInfo,
-//         ZExtInfo {
-//             id: 42,
-//             name: "device"
-//         }
-//     );
-
-//     roundtrip!(
-//         ext,
-//         ZExtFlagged,
-//         ZExtFlagged {
-//             _flag: marker::Flag,
-//             maybe_u8: Some(5),
-//             maybe_str: Some("flagged"),
-//         }
-//     );
-// }
-
-// #[test]
-// fn test_zmsg_simple() {
-//     let buf = [1, 2, 3, 4];
-//     let msg = ZMsgSimple {
-//         title: "simple",
-//         _begin: marker::ExtBlockBegin,
-//         ext_data: Some(ZExtData { bytes: &buf }),
-//         ext_info: Some(ZExtInfo {
-//             id: 99,
-//             name: "info",
-//         }),
-//         _end: marker::ExtBlockEnd,
-//         payload: &buf,
-//     };
-//     roundtrip!(ZMsgSimple, msg);
-// }
-
-// #[test]
-// fn test_zmsg_header() {
-//     let msg = ZMsgHeader {
-//         _header: marker::Header,
-//         topic: "topic/1",
-//         _begin: marker::ExtBlockBegin,
-//         ext_flagged: Some(ZExtFlagged {
-//             _flag: marker::Flag,
-//             maybe_u8: Some(7),
-//             maybe_str: Some("extra"),
-//         }),
-//         ext_empty: Some(ZExtEmpty {}),
-//         _end: marker::ExtBlockEnd,
-//         value: 12345,
-//     };
-//     roundtrip!(ZMsgHeader, msg);
-// }
-
-// #[test]
-// fn test_zmsg_counters() {
-//     let msg = ZMsgCounters {
-//         _flag: marker::Flag,
-//         _begin: marker::ExtBlockBegin,
-//         ext1: Some(ZExtCounter { counter: 10 }),
-//         _end: marker::ExtBlockEnd,
-//         checksum: 55,
-//     };
-//     roundtrip!(ZMsgCounters, msg);
-// }
-
-// #[test]
-// fn test_zmsg_complex() {
-//     let data = [9, 9, 9];
-//     let msg = ZMsgComplex {
-//         _header: marker::Header,
-//         name: "complex",
-//         _begin: marker::ExtBlockBegin,
-//         ext_info: Some(ZExtInfo {
-//             id: 11,
-//             name: "ext",
-//         }),
-//         ext_data: Some(ZExtData { bytes: &data }),
-//         ext_empty: Some(ZExtEmpty {}),
-//         _end: marker::ExtBlockEnd,
-//         trailing: "end",
-//     };
-//     roundtrip!(ZMsgComplex, msg);
-// }
-
-// #[test]
-// fn test_zmsg_partial_exts() {
-//     let msg = ZMsgComplex {
-//         _header: marker::Header,
-//         name: "partial",
-//         _begin: marker::ExtBlockBegin,
-//         ext_info: None,
-//         ext_data: Some(ZExtData { bytes: &[1, 2, 3] }),
-//         ext_empty: None,
-//         _end: marker::ExtBlockEnd,
-//         trailing: "zzz",
-//     };
-//     roundtrip!(ZMsgComplex, msg);
-//     let msg = ZMsgComplex {
-//         _header: marker::Header,
-//         name: "partial",
-//         _begin: marker::ExtBlockBegin,
-//         ext_info: None,
-//         ext_data: None,
-//         ext_empty: None,
-//         _end: marker::ExtBlockEnd,
-//         trailing: "zzz",
-//     };
-//     roundtrip!(ZMsgComplex, msg);
-// }
+    roundtrip!(ZMsgComplex, msg);
+    let msg = ZMsgComplexOption {
+        name: "partial",
+        ext_info: None,
+        ext_data: None,
+        ext_empty: None,
+        trailing: "zzz",
+    };
+    roundtrip!(ZMsgComplexOption, msg);
+}

@@ -3,18 +3,17 @@ use proc_macro2::TokenStream;
 use crate::model::{
     ZenohField, ZenohStruct,
     attribute::{
-        DefaultAttribute, EmptynessAttribute, ExtAttribute, HeaderAttribute, PresenceAttribute,
-        SizeAttribute,
+        DefaultAttribute, ExtAttribute, HeaderAttribute, PresenceAttribute, SizeAttribute,
     },
     ty::ZenohType,
 };
 
 pub fn parse(r#struct: &ZenohStruct) -> syn::Result<TokenStream> {
-    let mut enc = Vec::<TokenStream>::new();
-    let mut enc_header = Vec::<TokenStream>::new();
+    let mut body = Vec::<TokenStream>::new();
+    let mut header = Vec::<TokenStream>::new();
 
     if r#struct.header.is_some() {
-        enc_header.push(quote::quote! {
+        header.push(quote::quote! {
             let mut header: u8 = Self::BASE_HEADER;
         });
     }
@@ -26,15 +25,12 @@ pub fn parse(r#struct: &ZenohStruct) -> syn::Result<TokenStream> {
                 let ty = &field.ty;
                 let attr = &field.attr;
 
-                match &attr.header {
-                    HeaderAttribute::Mask(mask) => {
-                        enc_header.push(quote::quote! { header  |= {
-                            let v: u8 = self. #access.into();
-                            (v << (#mask .trailing_zeros())) & #mask
-                        }; });
-                        continue;
-                    }
-                    _ => {}
+                if let HeaderAttribute::Mask(mask) = &attr.header {
+                    header.push(quote::quote! { header  |= {
+                        let v: u8 = self. #access.into();
+                        (v << (#mask .trailing_zeros())) & #mask
+                    }; });
+                    continue;
                 }
 
                 // Lots of checks have been made in the `ty.rs` file so you can merge lots of cases without worrying
@@ -45,20 +41,19 @@ pub fn parse(r#struct: &ZenohStruct) -> syn::Result<TokenStream> {
                     | ZenohType::U32
                     | ZenohType::U64
                     | ZenohType::USize
-                    | ZenohType::ByteArray { .. }
+                    | ZenohType::ByteArray
                     | ZenohType::ByteSlice
                     | ZenohType::Str
                     | ZenohType::ZStruct => {
                         match &attr.size {
                             SizeAttribute::Prefixed => {
-                                enc.push(quote::quote! {
+                                body.push(quote::quote! {
                                     <usize as zenoh_codec::ZStructEncode>::z_encode(&< _ as zenoh_codec::ZStructEncode>::z_len(&self. #access), w)?;
                                 });
                             }
                             SizeAttribute::Header(mask) => {
-                                let e: u8 =
-                                    matches!(attr.emptyness, EmptynessAttribute::NotEmpty) as u8;
-                                enc_header.push(quote::quote! {
+                                let e: u8 = (!attr.maybe_empty) as u8;
+                                header.push(quote::quote! {
                                     header |= {
                                         let shift = #mask .trailing_zeros();
                                         let len = < _ as zenoh_codec::ZStructEncode>::z_len(&self. #access) as u8;
@@ -70,19 +65,19 @@ pub fn parse(r#struct: &ZenohStruct) -> syn::Result<TokenStream> {
                             _ => {}
                         }
 
-                        enc.push(quote::quote! {
+                        body.push(quote::quote! {
                             < _ as zenoh_codec::ZStructEncode>::z_encode(&self. #access, w)?;
                         });
                     }
                     ZenohType::Option(_) => {
                         match &attr.presence {
                             PresenceAttribute::Prefixed => {
-                                enc.push(quote::quote! {
+                                body.push(quote::quote! {
                                     <u8 as zenoh_codec::ZStructEncode>::z_encode(&(self. #access.is_some() as u8), w)?;
                                 });
                             }
                             PresenceAttribute::Header(mask) => {
-                                enc_header.push(quote::quote! {
+                                header.push(quote::quote! {
                                     if self. #access .is_some() {
                                         header |= #mask ;
                                     }
@@ -93,16 +88,15 @@ pub fn parse(r#struct: &ZenohStruct) -> syn::Result<TokenStream> {
 
                         match &attr.size {
                             SizeAttribute::Prefixed => {
-                                enc.push(quote::quote! {
+                                body.push(quote::quote! {
                                     if let Some(inner) = &self. #access {
                                         <usize as zenoh_codec::ZStructEncode>::z_encode(&< _ as zenoh_codec::ZStructEncode>::z_len(inner), w)?;
                                     }
                                 });
                             }
                             SizeAttribute::Header(mask) => {
-                                let e: u8 =
-                                    matches!(attr.emptyness, EmptynessAttribute::NotEmpty) as u8;
-                                enc_header.push(quote::quote! {
+                                let e: u8 = (!attr.maybe_empty) as u8;
+                                header.push(quote::quote! {
                                     if let Some(inner) = &self. #access {
                                         header |= {
                                             let shift = #mask .trailing_zeros();
@@ -116,7 +110,7 @@ pub fn parse(r#struct: &ZenohStruct) -> syn::Result<TokenStream> {
                             _ => {}
                         }
 
-                        enc.push(quote::quote! {
+                        body.push(quote::quote! {
                             if let Some(inner) = &self. #access {
                                 < _ as zenoh_codec::ZStructEncode>::z_encode(inner, w)?;
                             }
@@ -125,7 +119,7 @@ pub fn parse(r#struct: &ZenohStruct) -> syn::Result<TokenStream> {
                 }
             }
             ZenohField::ExtBlock { exts } => {
-                enc_header.push(quote::quote! {
+                header.push(quote::quote! {
                     let mut n_exts = 0;
                 });
 
@@ -143,33 +137,35 @@ pub fn parse(r#struct: &ZenohStruct) -> syn::Result<TokenStream> {
                         ),
                     };
 
+                    let mandatory = match &field.attr.mandatory {
+                        true => quote::quote! { true },
+                        false => quote::quote! { false },
+                    };
+
                     match ty {
-                        ZenohType::ZStruct => match &attr.default {
-                            DefaultAttribute::Expr(expr) => {
-                                enc_header.push(quote::quote! {
-                                    if &self. #access  != &#expr {
-                                        n_exts += 1;
-                                    }
-                                });
+                        ZenohType::ZStruct => {
+                            let expr = match &attr.default {
+                                DefaultAttribute::Expr(expr) => expr,
+                                _ => unreachable!(
+                                    "ExtBlock fields ZStruct must have a default attribute, this should have been caught earlier"
+                                ),
+                            };
 
-                                enc_ext.push(quote::quote! {
-                                    if &self. #access  != &#expr {
-                                        zenoh_codec::zext_encode::<_, #id, false>(&self. #access, w, n_exts != 0)?;
-                                    }
-                                });
-                            }
-                            _ => {
-                                enc_header.push(quote::quote! {
+                            header.push(quote::quote! {
+                                if &self. #access  != &#expr {
                                     n_exts += 1;
-                                });
+                                }
+                            });
 
-                                enc_ext.push(quote::quote! {
-                                    zenoh_codec::zext_encode::<_, #id, true>(&self. #access, w, n_exts != 0)?;
-                                });
-                            }
-                        },
+                            enc_ext.push(quote::quote! {
+                                if &self. #access  != &#expr {
+                                    n_exts -= 1;
+                                    zenoh_codec::zext_encode::<_, #id, #mandatory>(&self. #access, w, n_exts != 0)?;
+                                }
+                            });
+                        }
                         ZenohType::Option(_) => {
-                            enc_header.push(quote::quote! {
+                            header.push(quote::quote! {
                                 if self. #access .is_some() {
                                     n_exts += 1;
                                 }
@@ -177,7 +173,8 @@ pub fn parse(r#struct: &ZenohStruct) -> syn::Result<TokenStream> {
 
                             enc_ext.push(quote::quote! {
                                 if let Some(inner) = &self. #access {
-                                    zenoh_codec::zext_encode::<_, #id, false>(inner, w, n_exts != 0)?;
+                                    n_exts -= 1;
+                                    zenoh_codec::zext_encode::<_, #id, #mandatory>(inner, w, n_exts != 0)?;
                                 }
                             });
                         }
@@ -187,11 +184,13 @@ pub fn parse(r#struct: &ZenohStruct) -> syn::Result<TokenStream> {
                     }
                 }
 
-                enc.push(quote::quote! {
+                header.push(quote::quote! {
                     if n_exts > 0 {
                         header |= Self::Z;
                     }
+                });
 
+                body.push(quote::quote! {
                     #(#enc_ext)*
                 });
             }
@@ -199,7 +198,7 @@ pub fn parse(r#struct: &ZenohStruct) -> syn::Result<TokenStream> {
     }
 
     if r#struct.header.is_some() {
-        enc.insert(
+        body.insert(
             0,
             quote::quote! {
                 <u8 as zenoh_codec::ZStructEncode>::z_encode(&header, w)?;
@@ -208,8 +207,8 @@ pub fn parse(r#struct: &ZenohStruct) -> syn::Result<TokenStream> {
     }
 
     Ok(quote::quote! {
-        #(#enc_header)*
+        #(#header)*
 
-        #(#enc)*
+        #(#body)*
     })
 }
