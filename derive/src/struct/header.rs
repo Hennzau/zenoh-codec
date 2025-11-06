@@ -47,7 +47,7 @@ pub fn parse(r#struct: &ZenohStruct) -> syn::Result<TokenStream> {
 
         Ok(quote::quote! {
             impl #impl_generics #ident #ty_generics #where_clause {
-                const BASE_HEADER: u8 = #base_header;
+                const HEADER_BASE: u8 = #base_header;
 
                 #(#const_defs)*
             }
@@ -98,13 +98,6 @@ fn parse_part(
                         format!("Invalid hex value '{}' in header declaration", value_str),
                     )
                 })?
-            } else if let Some(stripped) = value_str.strip_prefix("0b") {
-                u8::from_str_radix(stripped, 2).map_err(|_| {
-                    syn::Error::new(
-                        span,
-                        format!("Invalid binary value '{}' in header declaration", value_str),
-                    )
-                })?
             } else {
                 value_str.parse().map_err(|_| {
                     syn::Error::new(
@@ -114,33 +107,43 @@ fn parse_part(
                 })?
             };
 
-            let result = value;
+            let x = syn::LitInt::new(&format!("0b{:b}", (1 << size) - 1), Span::call_site());
+            let y = *shift - size;
 
-            let left = 255u8 >> (8 - *shift);
-            let right = 255u8 << (*shift - size);
+            let slot = quote::quote! { #x << #y };
+            let shifted_value = quote::quote! { #value << #y };
+            let value = quote::quote! { #value };
 
             *shift = shift.checked_sub(size).ok_or_else(|| {
                 syn::Error::new(span, "Not enough bits left in header declaration")
             })?;
 
-            let value: u8 = value << *shift;
+            base_header.push(shifted_value);
 
-            let value = quote::quote! { (#value) & ((#left) & (#right)) };
-            base_header.push(quote::quote! { (#value) });
+            if name.to_string() == "_" {
+                return Ok(quote::quote! {});
+            }
 
+            let name_slot = Ident::new(&format!("HEADER_SLOT_{}", name_str), Span::call_site());
             Ok(quote::quote! {
-                pub const #name: u8 = #result;
+                pub const #name: u8 = #value;
+                const #name_slot: u8 = #slot;
             })
         } else {
-            let left = 255u8 >> (8 - *shift);
-            let right = 255u8 << (*shift - size);
+            let x = syn::LitInt::new(&format!("0b{:b}", (1 << size) - 1), Span::call_site());
+            let y = *shift - size;
 
             *shift = shift.checked_sub(size).ok_or_else(|| {
                 syn::Error::new(span, "Not enough bits left in header declaration")
             })?;
 
+            if name.to_string() == "_" {
+                return Ok(quote::quote! {});
+            }
+
+            let name = Ident::new(&format!("HEADER_SLOT_{}", name_str), Span::call_site());
             Ok(quote::quote! {
-                const #name: u8 = (#left) & (#right);
+                const #name: u8 = #x << #y;
             })
         }
     } else if value_opt.is_some() {
@@ -153,8 +156,9 @@ fn parse_part(
             .checked_sub(1)
             .ok_or_else(|| syn::Error::new(span, "Not enough bits left in header declaration"))?;
 
+        let name = Ident::new(&format!("HEADER_SLOT_{}", name_str), Span::call_site());
         Ok(quote::quote! {
-            const #name: u8 = 1 << #shift;
+            const #name: u8 = 0b1 << #shift;
         })
     }
 }

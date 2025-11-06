@@ -127,7 +127,7 @@ pub fn parse(r#struct: &ZenohStruct) -> syn::Result<TokenStream> {
             }
             ZenohField::ExtBlock { exts } => {
                 body.push(quote::quote! {
-                    let mut has_ext: bool = header & Self::Z != 0;
+                    let mut has_ext: bool = header & Self::HEADER_SLOT_Z != 0;
                 });
 
                 let mut ext_body = Vec::<TokenStream>::new();

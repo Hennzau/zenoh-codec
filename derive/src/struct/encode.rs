@@ -14,7 +14,7 @@ pub fn parse(r#struct: &ZenohStruct) -> syn::Result<TokenStream> {
 
     if r#struct.header.is_some() {
         header.push(quote::quote! {
-            let mut header: u8 = Self::BASE_HEADER;
+            let mut header: u8 = Self::HEADER_BASE;
         });
     }
 
@@ -186,7 +186,7 @@ pub fn parse(r#struct: &ZenohStruct) -> syn::Result<TokenStream> {
 
                 header.push(quote::quote! {
                     if n_exts > 0 {
-                        header |= Self::Z;
+                        header |= Self::HEADER_SLOT_Z;
                     }
                 });
 

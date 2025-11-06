@@ -1,5 +1,5 @@
-use proc_macro2::Span;
-use syn::{Expr, ExprPath, meta::ParseNestedMeta, parenthesized, spanned::Spanned};
+use proc_macro2::{Span, TokenStream};
+use syn::{Expr, Ident, meta::ParseNestedMeta, parenthesized, spanned::Spanned};
 
 #[derive(Clone)]
 pub struct ZenohAttribute {
@@ -94,13 +94,18 @@ fn mandatory_from_meta(meta: &ParseNestedMeta) -> syn::Result<bool> {
     Ok(false)
 }
 
+fn ident_to_header_path(ident: &Ident) -> TokenStream {
+    let ident = syn::Ident::new(&format!("HEADER_SLOT_{}", ident), ident.span());
+    quote::quote! { Self::#ident }
+}
+
 #[derive(Clone, Default)]
 pub enum SizeAttribute {
     #[default]
     None,
     Prefixed,
     Remain,
-    Header(ExprPath),
+    Header(TokenStream),
 }
 
 impl SizeAttribute {
@@ -115,8 +120,8 @@ impl SizeAttribute {
             } else if size == "header" {
                 let content;
                 parenthesized!(content in value);
-                let expr: ExprPath = content.parse()?;
-                return Ok(SizeAttribute::Header(expr));
+                let ident: Ident = content.parse()?;
+                return Ok(SizeAttribute::Header(ident_to_header_path(&ident)));
             } else {
                 return Err(syn::Error::new_spanned(
                     size,
@@ -134,7 +139,7 @@ pub enum PresenceAttribute {
     #[default]
     None,
     Prefixed,
-    Header(ExprPath),
+    Header(TokenStream),
 }
 
 impl PresenceAttribute {
@@ -147,8 +152,8 @@ impl PresenceAttribute {
             } else if presence == "header" {
                 let content;
                 parenthesized!(content in value);
-                let expr: ExprPath = content.parse()?;
-                return Ok(PresenceAttribute::Header(expr));
+                let ident: Ident = content.parse()?;
+                return Ok(PresenceAttribute::Header(ident_to_header_path(&ident)));
             } else {
                 return Err(syn::Error::new_spanned(
                     presence,
@@ -165,14 +170,14 @@ impl PresenceAttribute {
 pub enum HeaderAttribute {
     #[default]
     None,
-    Mask(ExprPath),
+    Mask(TokenStream),
 }
 
 impl HeaderAttribute {
     fn from_meta(meta: &ParseNestedMeta) -> syn::Result<Self> {
         if meta.path.is_ident("header") {
-            let expr: ExprPath = meta.value()?.parse()?;
-            return Ok(HeaderAttribute::Mask(expr));
+            let ident: Ident = meta.value()?.parse()?;
+            return Ok(HeaderAttribute::Mask(ident_to_header_path(&ident)));
         }
 
         Ok(HeaderAttribute::None)

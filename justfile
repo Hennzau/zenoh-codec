@@ -1,5 +1,7 @@
 test:
     cargo test
+    cargo run --example struct
+    cargo run --example ext
 
 tokei:
     tokei derive src --exclude src/tests.rs --exclude src/tests/

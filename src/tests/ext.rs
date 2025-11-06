@@ -24,17 +24,17 @@ pub struct ZExtInfo<'a> {
 }
 
 #[derive(ZExt, PartialEq, Debug)]
-#[zenoh(header = "Z|E|_|_|_|_|_|_")]
+#[zenoh(header = "Z|E|_:6")]
 pub struct ZExtHeader<'a> {
-    #[zenoh(presence = header(Self::Z))]
+    #[zenoh(presence = header(Z))]
     pub maybe_u8: Option<u8>,
 
-    #[zenoh(presence = header(Self::E), size = remain)]
+    #[zenoh(presence = header(E), size = remain)]
     pub maybe_str: Option<&'a str>,
 }
 
 #[derive(ZStruct, PartialEq, Debug)]
-#[zenoh(header = "Z|_|_|_|_|_|_|_")]
+#[zenoh(header = "Z|_:7")]
 pub struct ZMsgOption<'a> {
     #[zenoh(size = prefixed)]
     pub title: &'a str,
@@ -49,7 +49,7 @@ pub struct ZMsgOption<'a> {
 }
 
 #[derive(ZStruct, PartialEq, Debug)]
-#[zenoh(header = "Z|_|_|_|_|_|_|_")]
+#[zenoh(header = "Z|_:7")]
 pub struct ZMsgMix<'a> {
     #[zenoh(size = prefixed)]
     pub topic: &'a str,
@@ -67,7 +67,7 @@ impl ZMsgMix<'_> {
 }
 
 #[derive(ZStruct, PartialEq, Debug)]
-#[zenoh(header = "Z|_|_|_|_|_|_|_")]
+#[zenoh(header = "Z|_:7")]
 pub struct ZMsgCounters {
     #[zenoh(ext = 0x1)]
     pub ext1: Option<ZExtCounter>,
@@ -76,7 +76,7 @@ pub struct ZMsgCounters {
 }
 
 #[derive(ZStruct, PartialEq, Debug)]
-#[zenoh(header = "Z|_|_|_|_|_|_|_")]
+#[zenoh(header = "Z|_:7")]
 pub struct ZMsgComplex<'a> {
     #[zenoh(size = prefixed)]
     pub name: &'a str,
@@ -98,7 +98,7 @@ impl ZMsgComplex<'_> {
 }
 
 #[derive(ZStruct, PartialEq, Debug)]
-#[zenoh(header = "Z|_|_|_|_|_|_|_")]
+#[zenoh(header = "Z|_:7")]
 pub struct ZMsgComplexOption<'a> {
     #[zenoh(size = prefixed)]
     pub name: &'a str,
@@ -119,8 +119,8 @@ macro_rules! roundtrip {
         let mut data = [0u8; 256];
         let mut writer = &mut data.as_mut_slice();
 
-        let len = <$ty as ZStructEncode>::z_len(&$value);
-        <$ty as ZStructEncode>::z_encode(&$value, &mut writer).unwrap();
+        let len = <_ as ZStructEncode>::z_len(&$value);
+        <_ as ZStructEncode>::z_encode(&$value, &mut writer).unwrap();
 
         let mut reader = data.as_slice();
         let decoded = <$ty as ZStructDecode>::z_decode(&mut reader.sub(len).unwrap()).unwrap();

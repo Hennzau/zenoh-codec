@@ -29,7 +29,7 @@ struct ZOptionPrefixed<'a> {
 #[derive(ZStruct, PartialEq, Debug)]
 #[zenoh(header = "Z|S:7")]
 struct ZOptionHeaderRemain<'a> {
-    #[zenoh(presence = header(Self::Z), size = header(Self::S))]
+    #[zenoh(presence = header(Z), size = header(S))]
     pub maybe_slice: Option<&'a [u8]>,
 
     #[zenoh(size = remain)]
@@ -63,13 +63,13 @@ struct ZNestedOption<'a> {
 #[derive(ZStruct, PartialEq, Debug)]
 #[zenoh(header = "U|S_P|S_S:2|SS_P|SS_S:3")]
 struct ZHeaderComplex<'a> {
-    #[zenoh(presence = header(Self::U))]
+    #[zenoh(presence = header(U))]
     pub maybe_u8: Option<u8>,
 
-    #[zenoh(presence = header(Self::S_P), size = header(Self::S_S))]
+    #[zenoh(presence = header(S_P), size = header(S_S))]
     pub maybe_slice: Option<&'a [u8]>,
 
-    #[zenoh(presence = header(Self::SS_P), size = header(Self::SS_S), maybe_empty)]
+    #[zenoh(presence = header(SS_P), size = header(SS_S), maybe_empty)]
     pub maybe_str: Option<&'a str>,
 
     pub payload: u64,
@@ -102,10 +102,10 @@ struct ZComplex<'a> {
     pub id: u32,
     pub qos: u8,
 
-    #[zenoh(presence = header(Self::I))]
+    #[zenoh(presence = header(I))]
     pub opt_int: Option<u16>,
 
-    #[zenoh(presence = header(Self::S_P), size = header(Self::S_S))]
+    #[zenoh(presence = header(S_P), size = header(S_S))]
     pub opt_str: Option<&'a str>,
 
     #[zenoh(presence = prefixed)]
@@ -120,19 +120,19 @@ struct ZComplex<'a> {
 #[derive(ZStruct, PartialEq, Debug)]
 #[zenoh(header = "K|F2|I:1=0x1|V1:3|V2:2|")]
 struct ZHeader<'a> {
-    #[zenoh(header = Self::V1)]
+    #[zenoh(header = V1)]
     pub vu8: u8,
 
-    #[zenoh(header = Self::V2)]
+    #[zenoh(header = V2)]
     pub vu8_2: u8,
 
-    #[zenoh(presence = header(Self::K), size = prefixed)]
+    #[zenoh(presence = header(K), size = prefixed)]
     pub keyexpr: Option<&'a str>,
 
     #[zenoh(size = prefixed)]
     pub field1: deep::Inner<'a>,
 
-    #[zenoh(presence = header(Self::F2), size = remain)]
+    #[zenoh(presence = header(F2), size = remain)]
     pub field2: Option<ZComplex<'a>>,
 }
 
@@ -141,8 +141,8 @@ macro_rules! roundtrip {
         let mut data = [0u8; 256];
         let mut writer = &mut data.as_mut_slice();
 
-        let len = <$ty as ZStructEncode>::z_len(&$value);
-        <$ty as ZStructEncode>::z_encode(&$value, &mut writer).unwrap();
+        let len = <_ as ZStructEncode>::z_len(&$value);
+        <_ as ZStructEncode>::z_encode(&$value, &mut writer).unwrap();
 
         let mut reader = data.as_slice();
         let decoded = <$ty as ZStructDecode>::z_decode(&mut reader.sub(len).unwrap()).unwrap();
